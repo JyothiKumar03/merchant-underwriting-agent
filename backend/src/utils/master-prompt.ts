@@ -1,11 +1,11 @@
 import type { TEnrichedDealParams } from "../types/deal-types.js";
 
-const format_discount = (params: TEnrichedDealParams): string => {
-  if (params.discount_type === "percentage") {
-    return `${params.discount_value}% OFF`;
-  }
-  return `₹${params.discount_value} OFF`;
-};
+// ── helpers ──────────────────────────────────────────────────────────────────
+
+const format_discount = (params: TEnrichedDealParams): string =>
+  params.discount_type === "percentage"
+    ? `${params.discount_value}% OFF`
+    : `₹${params.discount_value} OFF`;
 
 const format_expiry = (ts: string): string => {
   try {
@@ -19,29 +19,53 @@ const format_expiry = (ts: string): string => {
   }
 };
 
+// Character limits per channel — single source of truth used in both prompt
+// text and the post-generation validator.
+export const CHANNEL_LIMITS: Record<string, number> = {
+  email: 60,
+  whatsapp: 120,
+  push: 50,
+  glance: 40,
+  payu: 55,
+  instagram: 150,
+};
+
+// Style keys must exactly match what the distributor tool and dashboard expect.
+export const STYLE_KEYS = ["formal", "casual", "urgent"] as const;
+export const CHANNEL_KEYS = Object.keys(CHANNEL_LIMITS) as Array<keyof typeof CHANNEL_LIMITS>;
+export const LANG_KEYS = ["english", "hindi", "telugu"] as const;
+
+// ── prompt builder ────────────────────────────────────────────────────────────
+
 export const build_master_prompt = (params: TEnrichedDealParams): string => {
   const discount_label = format_discount(params);
   const expiry_label = format_expiry(params.expiry_timestamp);
-  const min_order_clause = params.min_order_value
-    ? `Minimum order value: ₹${params.min_order_value}.`
-    : "";
-  const redemption_clause = params.max_redemptions
-    ? `Limited to ${params.max_redemptions} redemptions.`
-    : "";
-  const exclusive_clause = params.exclusive_flag
-    ? "This is an EXCLUSIVE GrabOn deal — available only on GrabOn."
-    : "";
 
-  return `You are GrabOn's lead performance copywriter for the Indian market. Your job is to write promotional copy that actually converts — not just copy that sounds good.
+  // Use whichever field name the enrichment layer provides
+  const category = params.merchant_category ?? params.category ?? "General";
+
+  const optional_lines = [
+    params.min_order_value ? `- Min order: ₹${params.min_order_value}` : "",
+    params.max_redemptions
+      ? `- Redemption cap: ${params.max_redemptions} uses`
+      : "",
+    params.exclusive_flag
+      ? `- EXCLUSIVE to GrabOn — not available elsewhere`
+      : "",
+  ]
+    .filter(Boolean)
+    .join("\n");
+
+  // Inline limits into the channel descriptions so the LLM sees them next to
+  // the instruction — not separated from it in a rules block.
+  return `You are GrabOn's lead performance copywriter for the Indian market. Write promotional copy that converts — not copy that merely sounds good.
 
 DEAL:
 - Merchant: ${params.merchant_name}
-- Category: ${params.merchant_category}
+- Category: ${category}
 - Discount: ${discount_label}
 - Valid until: ${expiry_label}
-${min_order_clause ? `- Min order: ₹${params.min_order_value}` : ""}
-${redemption_clause ? `- Redemption cap: ${params.max_redemptions}` : ""}
-${exclusive_clause ? `- EXCLUSIVE to GrabOn — not available elsewhere` : ""}
+${optional_lines}
 
 ---
 
@@ -49,83 +73,86 @@ TASK: Write 54 unique strings — 3 languages × 3 styles × 6 channels.
 
 ---
 
-## STYLES
+## OUTPUT STYLE KEYS
 
-Each style must use a fundamentally different psychological mechanism. Do not just change the tone — change the persuasion strategy.
+Use exactly these three key names. Each must use a fundamentally different psychological mechanism — not just a different tone.
 
-### 1. urgency_driven
-Trigger loss aversion and fear of missing out. Use scarcity signals (limited time, limited stock, expiry pressure). Write as if the user will regret not acting now. Words like "ends tonight", "only X left", "last chance", "going fast" work here. Never sound fake — the urgency must feel real and tied to the deal details.
+### formal
+Professional, benefit-led copy. Lead with what the user gains. No urgency pressure. No crowd references. Speak to a rational buyer who wants to make a good decision. Framing: "here is a genuinely good deal, and here is why."
 
-### 2. value_driven
-Make the user feel smart for spotting a great deal. Lead with the savings math or the value proposition — what they get, not what they save. Frame it as a win: "you're getting ₹X worth of Y for less". Avoid urgency. This user is rational and compares options. Speak to their desire to get the most out of every rupee.
+### casual
+Friendly, personal, like a tip from a friend who found a great deal. Warm, direct, no corporate language. Contractions welcome. Framing: "hey, you should check this out."
 
-### 3. social_proof_driven
-Use the crowd as the persuader. Imply that many people are already using this deal — it is popular, trusted, loved. Use signals like "thousands grabbed this", "most popular deal today", "everyone's talking about", "top pick". The implicit message: smart people are already on this, don't be left out.
+### urgent
+Trigger loss aversion. Use scarcity signals — expiry date, "going fast", "last chance", "ends tonight". The urgency must feel real and anchored to the deal details, not generic. Never sound fake. Framing: "if you don't act now, you'll miss this."
 
 ---
 
-## CHANNELS
+## CHANNELS AND CHARACTER LIMITS
 
-Each channel has a distinct user context. Write for that context — not just within the character limit.
+Character limits are HARD — count every character including spaces. Exceeding the limit means the string is rejected.
 
-### email (max 60 chars)
-This is an inbox subject line competing with dozens of others. It must earn the open. Use a curiosity gap or lead with the strongest hook — merchant + discount in the first few words. Avoid clickbait. Avoid all-caps. Think: what would make YOU open this?
+### email — max 60 characters
+Inbox subject line competing with dozens. Must earn the open. Lead with the strongest hook. No all-caps. No clickbait. Think: what makes YOU open an email?
 
-### whatsapp (max 120 chars)
-The user receives this as a personal message, possibly from a friend or a brand they trust. Write like a person texting a tip to a friend — warm, direct, no corporate fluff. One strong sentence or two short ones. Emoji is optional but can add warmth. Do not start with "Hello" or "Dear".
+### whatsapp — max 120 characters
+Arrives as a personal message. Write like a person texting a deal tip to a friend. One strong sentence or two short ones. Do not start with "Hello" or "Dear". Emoji optional.
 
-### push (max 50 chars)
-This is an interruption. The user is doing something else when this arrives. You have one punchy line to earn a tap. Lead with the biggest value signal. Use action words. Avoid filler. Think: headline of a billboard seen at 60 km/h.
+### push — max 50 characters
+An interruption. The user is mid-task. One punchy line, the biggest value signal first. Action words. Zero filler. Billboard at 60 km/h.
 
-### glance (max 40 chars)
-Shown on the lock screen or Glance widget with zero context. The user has not opted in — this just appears. It must be instantly readable and intriguing enough to unlock. Pure signal, zero noise. Merchant name + discount is usually enough if written sharply.
+### glance — max 40 characters
+Lock-screen widget, zero context, user has not opted in. Instantly readable. Merchant name + discount is your entire budget — use it sharply. Do NOT try to fit a CTA.
 
-### payu (max 55 chars)
-The user is already on the payment page, card in hand, about to complete a purchase on ${params.merchant_name}. This is the highest-intent moment. Reinforce that they are getting a great deal right now. Avoid re-selling the merchant — they already chose it. Focus on "you're saving X" or "exclusive deal applied".
+### payu — max 55 characters
+User is on the ${params.merchant_name} payment page, about to pay. Highest-intent moment. Do NOT re-introduce the merchant — they already chose it. Focus entirely on: "you are saving X right now." Reinforce the decision, don't re-sell it. Merchant name is NOT required here — the saving amount is enough.
 
-### instagram (max 150 chars)
-This is a caption paired with a visual. The image does the heavy lifting — the caption extends the mood and adds action. Be trendy, use natural-sounding hashtags (2–4 max), and end with a soft CTA or a hook. Write for a 22-year-old Indian user scrolling their feed.
+### instagram — max 150 characters
+Caption paired with a visual — the image carries the story, the caption adds energy and a soft CTA. 2–4 natural hashtags. Write for an urban Indian in their 20s scrolling a feed. Trendy but not cringe.
 
 ---
 
 ## LANGUAGES
 
 ### english
-Indian English — not British, not American. Use ₹ for amounts. Natural contractions are fine. Avoid overly formal phrasing.
+Indian English. Use ₹ for amounts. Natural contractions fine. Not British, not American.
 
 ### hindi
-Pure Devanagari script only. Write the way educated urban Indians actually speak Hindi — a natural mix is fine but the script must be Devanagari throughout. No Roman transliteration at all. Use ₹ for amounts.
+Devanagari script ONLY — no Roman transliteration anywhere. Write as educated urban Indians actually speak Hindi. Use ₹ for amounts.
 
 ### telugu
-Pure Telugu script (తెలుగు) only. Conversational, as spoken in Andhra Pradesh and Telangana urban areas. No Roman transliteration. Use ₹ for amounts.
+Telugu script ONLY (తెలుగు) — no Roman transliteration anywhere. Conversational, as spoken in Hyderabad and Andhra Pradesh urban areas. Use ₹ for amounts.
 
 ---
 
 ## RULES
-- All 54 strings must be unique — no copy-pasting with minor word swaps.
-- Every string must mention the merchant name and the discount value.
-- Character limits are hard limits — do not exceed them.
-- No URLs, coupon codes, or placeholder text.
-- Hindi and Telugu must be 100% in their respective scripts.
+1. All 54 strings must be unique. No copy-paste with minor word swaps.
+2. Every string must include the discount value (${discount_label}).
+3. Merchant name is required in all channels EXCEPT payu — see payu instructions above.
+4. Character limits are hard limits — count before you write.
+5. No URLs, coupon codes, or placeholder text.
+6. Hindi and Telugu must be 100% in their respective scripts — zero Roman characters.
+7. The three styles must use genuinely different persuasion mechanisms — if formal, casual, and urgent sound the same on any channel, rewrite.
 
 ---
 
-Return ONLY a valid JSON object in this exact structure. No explanation, no markdown, no extra text:
+Return ONLY a valid JSON object. No explanation, no markdown fences, no trailing commas:
+
 {
   "english": {
-    "urgency_driven": { "email": "...", "whatsapp": "...", "push": "...", "glance": "...", "payu": "...", "instagram": "..." },
-    "value_driven": { "email": "...", "whatsapp": "...", "push": "...", "glance": "...", "payu": "...", "instagram": "..." },
-    "social_proof_driven": { "email": "...", "whatsapp": "...", "push": "...", "glance": "...", "payu": "...", "instagram": "..." }
+    "formal":       { "email": "", "whatsapp": "", "push": "", "glance": "", "payu": "", "instagram": "" },
+    "casual":       { "email": "", "whatsapp": "", "push": "", "glance": "", "payu": "", "instagram": "" },
+    "urgent":       { "email": "", "whatsapp": "", "push": "", "glance": "", "payu": "", "instagram": "" }
   },
   "hindi": {
-    "urgency_driven": { "email": "...", "whatsapp": "...", "push": "...", "glance": "...", "payu": "...", "instagram": "..." },
-    "value_driven": { "email": "...", "whatsapp": "...", "push": "...", "glance": "...", "payu": "...", "instagram": "..." },
-    "social_proof_driven": { "email": "...", "whatsapp": "...", "push": "...", "glance": "...", "payu": "...", "instagram": "..." }
+    "formal":       { "email": "", "whatsapp": "", "push": "", "glance": "", "payu": "", "instagram": "" },
+    "casual":       { "email": "", "whatsapp": "", "push": "", "glance": "", "payu": "", "instagram": "" },
+    "urgent":       { "email": "", "whatsapp": "", "push": "", "glance": "", "payu": "", "instagram": "" }
   },
   "telugu": {
-    "urgency_driven": { "email": "...", "whatsapp": "...", "push": "...", "glance": "...", "payu": "...", "instagram": "..." },
-    "value_driven": { "email": "...", "whatsapp": "...", "push": "...", "glance": "...", "payu": "...", "instagram": "..." },
-    "social_proof_driven": { "email": "...", "whatsapp": "...", "push": "...", "glance": "...", "payu": "...", "instagram": "..." }
+    "formal":       { "email": "", "whatsapp": "", "push": "", "glance": "", "payu": "", "instagram": "" },
+    "casual":       { "email": "", "whatsapp": "", "push": "", "glance": "", "payu": "", "instagram": "" },
+    "urgent":       { "email": "", "whatsapp": "", "push": "", "glance": "", "payu": "", "instagram": "" }
   }
 }`;
 };
