@@ -73,7 +73,7 @@ Claude Desktop (you, typing in natural language)
 
 **Step 2 — Prompt construction.** `build_master_prompt()` takes the enriched params and builds a single structured prompt. It handles formatting — `40% OFF` vs `₹40 OFF`, Indian date format for expiry, optional clauses for min order / redemption cap / exclusive flag — and then lays out the full 54-string task with per-channel character limits, style definitions, and language rules.
 
-**Step 3 — One LLM call.** `generate_object()` from `ai-service` fires the prompt against the model with `ZDealCopyOutput` as the output schema. Zod validates the response. The schema enforces `english | hindi | telugu` → `urgency_driven | value_driven | social_proof_driven` → `email | whatsapp | push | glance | payu | instagram`. If the LLM returns something malformed, Zod throws and the tool surfaces the error cleanly.
+**Step 3 — One LLM call.** `generate_object()` from `ai-service` fires the prompt against the model with `ZDealCopyOutput` as the output schema. Zod validates the response. The schema enforces `english | hindi | telugu` → `formal | casual | urgent` → `email | whatsapp | push | glance | payu | instagram`. If the LLM returns something malformed, Zod throws and the tool surfaces the error cleanly.
 
 **Step 4 — Webhook simulation.** `simulate_webhooks()` runs all 6 channel simulations concurrently via `Promise.all`. Each channel has a realistic success probability and base latency. Failed channels retry up to 3 times with exponential backoff (300ms, 600ms). The result is a `TWebhookLog[]` with `channel`, `status`, `retries`, and `latency_ms` per entry.
 
@@ -85,9 +85,9 @@ The final return is a single JSON blob: merchant name, deal summary, all 54 vari
 
 The master prompt instructs the LLM to write for **psychological mechanism**, not just tone.
 
-- **urgency_driven** — loss aversion, scarcity signals, expiry pressure. Makes the user feel they'll regret not acting now.
-- **value_driven** — rational framing, savings math, "you're getting X for less". Speaks to the user who compares options.
-- **social_proof_driven** — crowd as persuader. "Thousands grabbed this", "most popular deal today". Implies smart people are already on it.
+- **formal** — professional, benefit-led. Lead with what the user gains. Speaks to a rational buyer who wants to make a good decision.
+- **casual** — friendly, personal, like a tip from a friend. Warm and direct, no corporate language.
+- **urgent** — loss aversion, scarcity signals, expiry pressure. Makes the user feel they'll regret not acting now.
 
 Each style is applied across 6 channels, and each channel has a distinct context and hard character limit:
 
@@ -102,7 +102,7 @@ Each style is applied across 6 channels, and each channel has a distinct context
 
 Languages: English (Indian — ₹, natural contractions), Hindi (pure Devanagari, no Roman transliteration), Telugu (pure Telugu script, urban Andhra/Telangana register).
 
-All 54 strings must be unique. Every string must mention the merchant name and discount value. Character limits are hard limits.
+All 54 strings must be unique. Every string must include the discount value; merchant name is required on all channels except payu. Character limits are hard limits.
 
 ---
 
