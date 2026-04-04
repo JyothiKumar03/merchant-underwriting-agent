@@ -1,0 +1,22 @@
+{
+  "name": "backend",
+  "module": "index.ts",
+  "type": "module",
+  "private": true,
+  "devDependencies": {
+    "@types/bun": "latest",
+    "@types/express": "^5.0.6",
+    "@types/node": "^25.5.2",
+    "ai": "^6.0.146",
+    "dotenv": "^17.4.0",
+    "express": "^5.2.1",
+    "zod": "^4.3.6"
+  },
+  "peerDependencies": {
+    "typescript": "^6.0.2"
+  },
+  "dependencies": {
+    "@neondatabase/serverless": "^1.0.2",
+    "pg": "^8.20.0"
+  }
+}
