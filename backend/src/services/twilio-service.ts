@@ -31,7 +31,7 @@ function getTwilioConfig(): TwilioConfig {
 // ── Message composers ──────────────────────────────────────────────────────────
 
 function composeCreditMessage(result: UnderwritingResult): string {
-  if (result.risk_tier === "Rejected") {
+  if (result.risk_tier === "rejected") {
     return `🏦 GrabCredit — Application Update
 
 Hi ${result.merchant_name},
@@ -62,7 +62,7 @@ Powered by GrabCredit × Poonawalla Fincorp`;
 }
 
 function composeInsuranceMessage(result: UnderwritingResult): string {
-  if (result.risk_tier === "Rejected") {
+  if (result.risk_tier === "rejected") {
     return `🛡️ GrabInsurance — Application Update
 
 Hi ${result.merchant_name},

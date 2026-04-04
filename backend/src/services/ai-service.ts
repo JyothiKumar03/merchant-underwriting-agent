@@ -53,7 +53,7 @@ function buildUserPrompt(
       : 0;
 
   let offerLine: string;
-  if (tier === "Rejected") {
+  if (tier === "rejected") {
     offerLine = "No offer extended.";
   } else if (mode === "credit" && creditOffer) {
     offerLine = `Credit Limit: ₹${(creditOffer.credit_limit_inr / 100_000).toFixed(1)}L | Rate: ${creditOffer.interest_rate_percent}% p.a. | Tenure: ${creditOffer.tenure_options_months.join("/")} months`;
@@ -195,7 +195,7 @@ function buildTemplateRationale(
     return `${merchant.name} did not qualify for a pre-approved offer at this time. ${scoring.pre_filter_reason ?? "The merchant profile does not meet the minimum eligibility criteria."}. We encourage the merchant to continue growing on the platform and reapply once the highlighted criteria are met.`;
   }
 
-  if (tier === "Rejected") {
+  if (tier === "rejected") {
     return `${merchant.name} passed initial eligibility checks but received a composite risk score of ${scoring.composite_score}/100, below the minimum threshold of 30. The primary drag was a combination of low customer loyalty (${(merchant.customer_return_rate * 100).toFixed(1)}%) and elevated refund rates (${(merchant.return_and_refund_rate * 100).toFixed(1)}%). We recommend improving platform engagement and reducing refunds over the next 3–6 months before reapplying.`;
   }
 
