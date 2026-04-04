@@ -70,3 +70,8 @@ Example:
 export function UserCard() {
   return <div />;
 }
+
+# Backend Rules
+
+- Always use ARROW functions, no function keyword function
+- Make sure that all variables, functions are `snake_case`, file names: kebab-case, types: TCamelCase
