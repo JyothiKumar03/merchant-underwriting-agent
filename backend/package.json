@@ -16,7 +16,9 @@
     "typescript": "^6.0.2"
   },
   "dependencies": {
+    "@ai-sdk/anthropic": "^3.0.66",
     "@neondatabase/serverless": "^1.0.2",
-    "pg": "^8.20.0"
+    "pg": "^8.20.0",
+    "twilio": "^5.13.1"
   }
 }
