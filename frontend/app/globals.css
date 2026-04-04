@@ -1,3 +1,2 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+/* Styles have moved to /globals.css at the frontend root. */
+@import "../globals.css";
