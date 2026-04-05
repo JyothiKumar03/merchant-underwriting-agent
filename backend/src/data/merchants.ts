@@ -1,12 +1,12 @@
-import type { MerchantProfile } from "../types/index.js";
+import type { TMerchantProfile } from "../types/index.js";
 
-export const merchants: MerchantProfile[] = [
+export const merchants: TMerchantProfile[] = [
   //  TIER 1 (MER_001 – MER_003)
 
   {
     merchant_id: "MER_001",
     name: "StyleKraft Fashion",
-    category: "Fashion & Beauty",
+    category: "fashion_beauty",
     contact_whatsapp: "+917995938970",
     months_on_platform: 18,
     total_deals_listed: 142,
@@ -26,7 +26,7 @@ export const merchants: MerchantProfile[] = [
   {
     merchant_id: "MER_002",
     name: "WellnessFirst Pharmacy",
-    category: "Health & Wellness",
+    category: "health_wellness",
     contact_whatsapp: "+917995938970",
     months_on_platform: 24,
     total_deals_listed: 198,
@@ -46,7 +46,7 @@ export const merchants: MerchantProfile[] = [
   {
     merchant_id: "MER_003",
     name: "Wanderlust Holidays",
-    category: "Travel",
+    category: "travel",
     contact_whatsapp: "+917995938970",
     months_on_platform: 20,
     total_deals_listed: 165,
@@ -68,7 +68,7 @@ export const merchants: MerchantProfile[] = [
   {
     merchant_id: "MER_004",
     name: "TechNova Electronics",
-    category: "Electronics",
+    category: "electronics",
     contact_whatsapp: "+917995938970",
     months_on_platform: 14,
     total_deals_listed: 87,
@@ -88,7 +88,7 @@ export const merchants: MerchantProfile[] = [
   {
     merchant_id: "MER_005",
     name: "FreshBasket Groceries",
-    category: "Food & Delivery",
+    category: "food_delivery",
     contact_whatsapp: "+917995938970",
     months_on_platform: 12,
     total_deals_listed: 95,
@@ -110,7 +110,7 @@ export const merchants: MerchantProfile[] = [
   {
     merchant_id: "MER_006",
     name: "QuickBite Delivery",
-    category: "Food & Delivery",
+    category: "food_delivery",
     contact_whatsapp: "+917995938970",
     months_on_platform: 11,
     total_deals_listed: 54,
@@ -130,7 +130,7 @@ export const merchants: MerchantProfile[] = [
   {
     merchant_id: "MER_007",
     name: "UrbanEscape Tours",
-    category: "Travel",
+    category: "travel",
     contact_whatsapp: "+917995938970",
     months_on_platform: 8,
     total_deals_listed: 32,
@@ -153,7 +153,7 @@ export const merchants: MerchantProfile[] = [
   {
     merchant_id: "MER_008",
     name: "NewTrend Accessories",
-    category: "Fashion & Beauty",
+    category: "fashion_beauty",
     contact_whatsapp: "+917995938970",
     months_on_platform: 3,
     total_deals_listed: 12,
@@ -174,7 +174,7 @@ export const merchants: MerchantProfile[] = [
   {
     merchant_id: "MER_009",
     name: "GadgetZone Express",
-    category: "Electronics",
+    category: "electronics",
     contact_whatsapp: "+917995938970",
     months_on_platform: 9,
     total_deals_listed: 28,
@@ -195,7 +195,7 @@ export const merchants: MerchantProfile[] = [
   {
     merchant_id: "MER_010",
     name: "GlowUp Beauty",
-    category: "Fashion & Beauty",
+    category: "fashion_beauty",
     contact_whatsapp: "+917995938970",
     months_on_platform: 7,
     total_deals_listed: 22,
@@ -213,6 +213,6 @@ export const merchants: MerchantProfile[] = [
   },
 ];
 
-export const get_merchant_by_id = (id: string): MerchantProfile | undefined => {
+export const get_merchant_by_id = (id: string): TMerchantProfile | undefined => {
   return merchants.find((m) => m.merchant_id === id);
 }

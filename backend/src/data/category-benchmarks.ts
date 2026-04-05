@@ -1,31 +1,31 @@
-import type { CategoryBenchmark } from "../types/index.js";
+import type { CategoryBenchmark, TCategory } from "../types/index.js";
 
-export const CATEGORY_BENCHMARKS: Record<string, CategoryBenchmark> = {
-  "Fashion & Beauty": {
+export const CATEGORY_BENCHMARKS: Record<TCategory, CategoryBenchmark> = {
+  "fashion_beauty": {
     avg_return_rate: 0.52,
     avg_refund_rate: 0.048,
     avg_monthly_gmv: 1200000,
     avg_order_value: 2200,
   },
-  Electronics: {
+  "electronics": {
     avg_return_rate: 0.41,
     avg_refund_rate: 0.042,
     avg_monthly_gmv: 950000,
     avg_order_value: 6500,
   },
-  "Food & Delivery": {
+  "food_delivery": {
     avg_return_rate: 0.45,
     avg_refund_rate: 0.041,
     avg_monthly_gmv: 800000,
     avg_order_value: 550,
   },
-  "Health & Wellness": {
+  "health_wellness": {
     avg_return_rate: 0.58,
     avg_refund_rate: 0.032,
     avg_monthly_gmv: 700000,
     avg_order_value: 1200,
   },
-  Travel: {
+  "travel": {
     avg_return_rate: 0.35,
     avg_refund_rate: 0.055,
     avg_monthly_gmv: 1500000,
@@ -33,7 +33,7 @@ export const CATEGORY_BENCHMARKS: Record<string, CategoryBenchmark> = {
   },
 };
 
-export function getBenchmark(category: string): CategoryBenchmark {
+export function get_category_benchmark(category: TCategory): CategoryBenchmark {
   const benchmark = CATEGORY_BENCHMARKS[category];
   if (!benchmark) {
     // Fallback to conservative defaults for unknown categories
