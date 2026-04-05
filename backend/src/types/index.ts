@@ -174,7 +174,7 @@ export type WhatsAppLogRow = TWhatsAppLogRow;
 
 // AI service types
 
-export type TAiProvider = "openai" | "anthropic" | "openrouter";
+export type TAiProvider = "openai" | "anthropic" | "open_router";
 
 export type TAiModel = {
   model_id: string;
