@@ -28,8 +28,6 @@ export const whatsapp_webhook = async (req: Request, res: Response): Promise<voi
   const lookup_number = wa_id ? `+${wa_id}` : from.replace(/^whatsapp:/i, "").trim();
   const body: string = (req.body?.Body ?? "").trim().toLowerCase();
 
-  console.log("[whatsapp-webhook] from:", from, "wa_id:", wa_id, "body:", body);
-
   // Only react to accept or reject — ignore everything else silently
   if (body !== "accept" && body !== "reject") {
     res.status(HTTP.OK).type("text/xml").send(TWIML_EMPTY);
@@ -38,16 +36,13 @@ export const whatsapp_webhook = async (req: Request, res: Response): Promise<voi
 
   // Resolve merchant from the sender's WhatsApp number
   const merchant_id = await get_merchant_id_by_whatsapp(lookup_number);
-  console.log("[whatsapp-webhook] resolved merchant_id:", merchant_id);
 
   if (!merchant_id) {
-    console.warn(`[whatsapp-webhook] No merchant found for number: ${from}`);
     res.status(HTTP.OK).type("text/xml").send(TWIML_EMPTY);
     return;
   }
 
   if (body === "reject") {
-    console.info(`[whatsapp-webhook] Merchant ${merchant_id} rejected offer.`);
     res.status(HTTP.OK).type("text/xml").send(
       twiml_reply(
         `No worries! Your offer has been noted as declined. You can request a new evaluation anytime from the GrabOn dashboard.\n\nGrabOn x Poonawalla Fincorp`
@@ -76,7 +71,6 @@ export const whatsapp_webhook = async (req: Request, res: Response): Promise<voi
   // Generate NACH UMRN and activate mandate
   const umrn = `${NACH.UMRN_PREFIX}-${merchant_id}-${Date.now()}`;
   await update_nach_status(merchant_id, umrn);
-  console.info(`[whatsapp-webhook] Mandate activated for ${merchant_id}: ${umrn}`);
 
   res.status(HTTP.OK).type("text/xml").send(
     twiml_reply(
