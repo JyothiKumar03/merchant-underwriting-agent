@@ -16,27 +16,12 @@ import { Button } from "@/components/ui/button";
 import { CATEGORY_LABELS, CATEGORY_EMOJI, FOOTER_TEXT } from "@/constants";
 import { format_inr, format_percent, avg_non_zero } from "@/lib/format";
 import { cn } from "@/lib/utils";
+import { StatCard } from "@/components/stat-card";
 import type { TUnderWritingMode, TUnderwritingResult } from "@/types";
 
 type MerchantDetailViewProps = {
   merchant_id: string;
 };
-
-const MetricCard = ({
-  label,
-  value,
-  sub,
-}: {
-  label: string;
-  value: string | number;
-  sub?: string;
-}) => (
-  <div className="rounded-xl border border-border bg-card p-4">
-    <p className="text-xs text-muted-foreground font-medium mb-1">{label}</p>
-    <p className="text-xl font-bold text-foreground">{value}</p>
-    {sub && <p className="text-xs text-muted-foreground mt-0.5">{sub}</p>}
-  </div>
-);
 
 const LoadingSpinner = () => (
   <div className="flex flex-col items-center justify-center py-16 gap-4">
@@ -107,14 +92,11 @@ export const MerchantDetailView = ({ merchant_id }: MerchantDetailViewProps) => 
 
   if (merchant_loading) {
     return (
-      <div className="flex flex-col min-h-screen">
-        <Header />
-        <div className="flex-1 mx-auto w-full max-w-6xl px-6 py-10">
-          <div className="animate-pulse space-y-6">
-            <div className="h-8 w-48 rounded-lg bg-muted" />
-            <div className="h-40 rounded-2xl bg-muted" />
-            <div className="h-64 rounded-2xl bg-muted" />
-          </div>
+      <div className="flex-1 mx-auto w-full max-w-6xl px-6 py-10">
+        <div className="animate-pulse space-y-6">
+          <div className="h-8 w-48 rounded-lg bg-muted" />
+          <div className="h-40 rounded-2xl bg-muted" />
+          <div className="h-64 rounded-2xl bg-muted" />
         </div>
       </div>
     );
@@ -122,16 +104,13 @@ export const MerchantDetailView = ({ merchant_id }: MerchantDetailViewProps) => 
 
   if (!merchant) {
     return (
-      <div className="flex flex-col min-h-screen">
-        <Header />
-        <div className="flex-1 flex flex-col items-center justify-center py-24 text-center">
-          <span className="text-4xl mb-4">🔍</span>
-          <p className="text-lg font-semibold">Merchant not found</p>
-          <p className="text-sm text-muted-foreground mt-1">ID: {merchant_id}</p>
-          <Link href="/" className="mt-6">
-            <Button variant="outline">← Back to Dashboard</Button>
-          </Link>
-        </div>
+      <div className="flex-1 flex flex-col items-center justify-center py-24 text-center">
+        <span className="text-4xl mb-4">🔍</span>
+        <p className="text-lg font-semibold">Merchant not found</p>
+        <p className="text-sm text-muted-foreground mt-1">ID: {merchant_id}</p>
+        <Link href="/" className="mt-6">
+          <Button variant="outline">← Back to Dashboard</Button>
+        </Link>
       </div>
     );
   }
@@ -146,8 +125,6 @@ export const MerchantDetailView = ({ merchant_id }: MerchantDetailViewProps) => 
 
   return (
     <div className="flex flex-col min-h-screen">
-      <Header />
-
       <main className="flex-1 mx-auto w-full max-w-6xl px-6 py-8 space-y-8">
         {/* Back + title */}
         <div>
@@ -188,22 +165,22 @@ export const MerchantDetailView = ({ merchant_id }: MerchantDetailViewProps) => 
 
         {/* Merchant metrics */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-          <MetricCard
+          <StatCard
             label="Avg Monthly GMV"
             value={format_inr(avg_gmv)}
             sub="non-zero months"
           />
-          <MetricCard
+          <StatCard
             label="Customer Return Rate"
             value={format_percent(merchant.customer_return_rate)}
             sub={`${merchant.unique_customer_count.toLocaleString()} unique customers`}
           />
-          <MetricCard
+          <StatCard
             label="Return & Refund Rate"
             value={format_percent(merchant.return_and_refund_rate)}
             sub="lower is better"
           />
-          <MetricCard
+          <StatCard
             label="Platform Tenure"
             value={`${merchant.months_on_platform} mo`}
             sub={`${merchant.total_deals_listed} deals listed`}
@@ -212,20 +189,20 @@ export const MerchantDetailView = ({ merchant_id }: MerchantDetailViewProps) => 
 
         {/* Secondary metrics row */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-          <MetricCard
+          <StatCard
             label="Avg Order Value"
             value={format_inr(merchant.avg_order_value)}
           />
-          <MetricCard
+          <StatCard
             label="Coupon Redemption"
             value={format_percent(merchant.coupon_redemption_rate)}
           />
-          <MetricCard
+          <StatCard
             label="Deal Exclusivity"
             value={format_percent(merchant.deal_exclusivity_rate)}
             sub="GrabOn-exclusive"
           />
-          <MetricCard
+          <StatCard
             label="Seasonality Index"
             value={merchant.seasonality_index.toFixed(2)}
             sub="1.0 = stable"
@@ -469,20 +446,3 @@ export const MerchantDetailView = ({ merchant_id }: MerchantDetailViewProps) => 
   );
 };
 
-const Header = () => (
-  <header className="sticky top-0 z-30 border-b border-border bg-card/80 backdrop-blur-sm">
-    <div className="mx-auto max-w-6xl px-6 py-4 flex items-center gap-3">
-      <Link href="/" className="flex items-center gap-3 hover:opacity-80 transition-opacity">
-        <div className="flex items-center justify-center w-9 h-9 rounded-xl bg-primary text-primary-foreground font-bold text-sm">
-          G
-        </div>
-        <div>
-          <p className="font-bold text-foreground leading-tight">
-            GrabCredit × GrabInsurance
-          </p>
-          <p className="text-xs text-muted-foreground">Merchant Underwriting Agent</p>
-        </div>
-      </Link>
-    </div>
-  </header>
-);

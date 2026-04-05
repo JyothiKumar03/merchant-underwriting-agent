@@ -105,3 +105,33 @@ export type TSendOfferRequest = {
 export type TAcceptOfferRequest = {
   merchantId: string;
 };
+
+// Merchant creation
+
+export type TMerchantInput = {
+  name: string;
+  category: TCategory;
+  contact_whatsapp: string;
+  months_on_platform: number;
+  total_deals_listed: number;
+  monthly_gmv_12m: number[];
+  coupon_redemption_rate: number;
+  unique_customer_count: number;
+  customer_return_rate: number;
+  avg_order_value: number;
+  seasonality_index: number;
+  deal_exclusivity_rate: number;
+  return_and_refund_rate: number;
+};
+
+export type TCreateMerchantResponse = {
+  merchant: TMerchantProfile;
+};
+
+export type TBulkUploadResponse = {
+  inserted_count: number;
+  failed_count: number;
+  inserted: { merchant_id: string; name: string }[];
+  validation_errors: { row: number; error: string }[];
+  insert_errors: { row: number; error: string }[];
+};

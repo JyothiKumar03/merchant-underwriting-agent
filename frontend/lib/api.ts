@@ -7,6 +7,9 @@ import type {
   TUnderwriteRequest,
   TSendOfferRequest,
   TAcceptOfferRequest,
+  TMerchantInput,
+  TCreateMerchantResponse,
+  TBulkUploadResponse,
 } from "@/types";
 
 const post = async <TBody, TResponse>(
@@ -45,4 +48,20 @@ export const api = {
     body: TAcceptOfferRequest
   ): Promise<TAcceptOfferResponse> =>
     post(`${ENV.NEXT_PUBLIC_BASE_URL}/accept-offer`, body),
+
+  create_merchant: async (body: TMerchantInput): Promise<TCreateMerchantResponse> =>
+    post(`${ENV.NEXT_PUBLIC_BASE_URL}/merchants`, body),
+
+  bulk_upload: async (csv_text: string): Promise<TBulkUploadResponse> => {
+    const res = await fetch(`${ENV.NEXT_PUBLIC_BASE_URL}/merchants/bulk-upload`, {
+      method: "POST",
+      headers: { "Content-Type": "text/csv" },
+      body: csv_text,
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ error: `HTTP ${res.status}` }));
+      throw new Error(err.error ?? `HTTP ${res.status}`);
+    }
+    return res.json() as Promise<TBulkUploadResponse>;
+  },
 };
