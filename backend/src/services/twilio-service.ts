@@ -1,155 +1,119 @@
 import twilio from "twilio";
 import type {
-  UnderwritingResult,
-  Mode,
-  WhatsAppStatus,
+  TUnderwritingResultRow,
+  TUnderWritingMode,
+  TWhatsAppStatus,
+  TTwilioConfig,
+  TWhatsAppDeliveryResult,
 } from "../types/index.js";
+import { ENV } from "../constants/env.js";
 
-// ── Client factory ─────────────────────────────────────────────────────────────
-
-interface TwilioConfig {
-  accountSid: string;
-  authToken: string;
-  /** The Twilio WhatsApp sandbox number, e.g. +14155238886 */
-  fromNumber: string;
-}
-
-function getTwilioConfig(): TwilioConfig {
-  const accountSid = process.env.TWILIO_ACCOUNT_SID;
-  const authToken = process.env.TWILIO_AUTH_TOKEN;
-  const fromNumber = process.env.TWILIO_WHATSAPP_FROM;
-
-  if (!accountSid || !authToken || !fromNumber) {
+const get_twilio_config = (): TTwilioConfig => {
+  const { TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, TWILIO_WHATSAPP_FROM } = ENV;
+  if (
+    TWILIO_ACCOUNT_SID === "not-set" ||
+    TWILIO_AUTH_TOKEN === "not-set" ||
+    TWILIO_WHATSAPP_FROM === "not-set"
+  ) {
     throw new Error(
       "Missing Twilio env vars: TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, TWILIO_WHATSAPP_FROM"
     );
   }
+  return {
+    accountSid: TWILIO_ACCOUNT_SID,
+    authToken: TWILIO_AUTH_TOKEN,
+    fromNumber: TWILIO_WHATSAPP_FROM,
+  };
+};
 
-  return { accountSid, authToken, fromNumber };
-}
+// Builds the WhatsApp message body from the LLM-generated user_message + static offer details
 
-// ── Message composers ──────────────────────────────────────────────────────────
+const compose_message = (result: TUnderwritingResultRow, mode: TUnderWritingMode): string => {
+  const is_credit = mode === "credit";
+  const product = is_credit ? "GrabCredit 💳" : "GrabInsurance 🛡️";
+  const user_msg = is_credit ? result.credit_user_message : result.insurance_user_message;
 
-function composeCreditMessage(result: UnderwritingResult): string {
   if (result.risk_tier === "rejected") {
-    return `🏦 GrabCredit — Application Update
-
-Hi ${result.merchant_name},
-
-After reviewing your GrabOn merchant profile, we're unable to extend a credit offer at this time.
-
-${result.credit_rationale}
-
-We automatically re-evaluate all merchants quarterly.
-Powered by GrabCredit × Poonawalla Fincorp`;
+    return [
+      `*${product} — Application Update*`,
+      "",
+      user_msg,
+      "",
+      "━━━━━━━━━━━━━━━",
+      "🔄 We automatically re-evaluate all merchants every quarter.",
+      "📞 Questions? Reply to this message.",
+      "━━━━━━━━━━━━━━━",
+      "_Powered by GrabOn x Poonawalla Fincorp_",
+    ].join("\n");
   }
 
-  const c = result.credit_offer!;
-  return `🏦 GrabCredit Pre-Approved Offer
+  const offer_lines: string[] = [];
 
-Hi ${result.merchant_name},
-
-You've been pre-approved for a working capital loan:
-💰 Credit Limit: ₹${(c.credit_limit_inr / 100_000).toFixed(0)}L
-📊 Rate: ${c.interest_rate_percent}% p.a. (${result.risk_tier})
-📅 Tenure: ${c.tenure_options_months.join(" / ")} months
-
-Why you qualified:
-${result.credit_rationale}
-
-Reply ACCEPT to proceed or DETAILS for full terms.
-Powered by GrabCredit × Poonawalla Fincorp`;
-}
-
-function composeInsuranceMessage(result: UnderwritingResult): string {
-  if (result.risk_tier === "rejected") {
-    return `🛡️ GrabInsurance — Application Update
-
-Hi ${result.merchant_name},
-
-After reviewing your GrabOn merchant profile, we're unable to extend an insurance offer at this time.
-
-${result.insurance_rationale}
-
-We automatically re-evaluate all merchants quarterly.
-Powered by GrabInsurance × Poonawalla Fincorp`;
+  if (is_credit && result.credit_offer) {
+    const c = result.credit_offer;
+    offer_lines.push(
+      `💰 *Credit Limit:* Rs.${(c.credit_limit_inr / 100_000).toFixed(0)}L`,
+      `📈 *Interest Rate:* ${c.interest_rate_percent}% p.a.`,
+      `📅 *Tenure Options:* ${c.tenure_options_months.join(" / ")} months`,
+      `🏷️ *Tier:* ${result.risk_tier.replace("_", " ").toUpperCase()}`
+    );
+  } else if (!is_credit && result.insurance_offer) {
+    const ins = result.insurance_offer;
+    offer_lines.push(
+      `🛡️ *Policy:* ${ins.policy_type}`,
+      `💰 *Coverage:* Rs.${(ins.coverage_amount_inr / 100_000).toFixed(1)}L`,
+      `📋 *Quarterly Premium:* Rs.${ins.quarterly_premium_inr.toLocaleString("en-IN")}`,
+      `🏷️ *Tier:* ${result.risk_tier.replace("_", " ").toUpperCase()}`
+    );
   }
 
-  const ins = result.insurance_offer!;
-  return `🛡️ GrabInsurance Pre-Approved Offer
+  return [
+    `*${product} — Pre-Approved Offer* 🎉`,
+    "",
+    user_msg,
+    "",
+    "━━━━━━━━━━━━━━━",
+    "*Your Offer Details:*",
+    ...offer_lines,
+    "━━━━━━━━━━━━━━━",
+    "✅ Reply *ACCEPT* to proceed",
+    "❌ Reply *REJECT* to decline",
+    "━━━━━━━━━━━━━━━",
+    "_Powered by GrabOn x Poonawalla Fincorp_",
+  ].join("\n");
+};
 
-Hi ${result.merchant_name},
+export const send_whatsapp_offer = async (
+  to_number: string,
+  result: TUnderwritingResultRow,
+  mode: TUnderWritingMode
+): Promise<TWhatsAppDeliveryResult> => {
+  const message_body = compose_message(result, mode);
 
-You're eligible for:
-🛡️ ${ins.policy_type}
-💰 Coverage: ₹${(ins.coverage_amount_inr / 100_000).toFixed(1)}L
-📊 Premium: ₹${ins.quarterly_premium_inr.toLocaleString("en-IN")}/quarter (${result.risk_tier} rate)
-
-Why you qualified:
-${result.insurance_rationale}
-
-Reply ACCEPT to proceed or DETAILS for full terms.
-Powered by GrabInsurance × Poonawalla Fincorp`;
-}
-
-// ── Delivery result ────────────────────────────────────────────────────────────
-
-export interface WhatsAppDeliveryResult {
-  status: WhatsAppStatus;
-  messageSid?: string;
-  errorMessage?: string;
-  messageBody: string;
-}
-
-// ── Main send function ─────────────────────────────────────────────────────────
-
-/**
- * Sends a formatted WhatsApp offer notification via the Twilio sandbox.
- *
- * Returns a structured result — never throws — so delivery failure cannot
- * crash an underwriting response.
- */
-export async function sendWhatsAppOffer(
-  toNumber: string,
-  result: UnderwritingResult,
-  mode: Mode
-): Promise<WhatsAppDeliveryResult> {
-  const messageBody =
-    mode === "credit"
-      ? composeCreditMessage(result)
-      : composeInsuranceMessage(result);
-
-  let config: TwilioConfig;
+  let config: TTwilioConfig;
   try {
-    config = getTwilioConfig();
+    config = get_twilio_config();
   } catch (err) {
-    const errorMessage = err instanceof Error ? err.message : String(err);
-    return { status: "failed", errorMessage, messageBody };
+    const error_message = err instanceof Error ? err.message : String(err);
+    return { status: "failed" as TWhatsAppStatus, errorMessage: error_message, messageBody: message_body };
   }
 
   const client = twilio(config.accountSid, config.authToken);
   const from = `whatsapp:${config.fromNumber}`;
-  const to = `whatsapp:${toNumber}`;
+  const to = `whatsapp:${to_number}`;
 
   try {
-    const message = await client.messages.create({ body: messageBody, from, to });
-    return { status: "sent", messageSid: message.sid, messageBody };
+    const message = await client.messages.create({ body: message_body, from, to });
+    return { status: "sent" as TWhatsAppStatus, messageSid: message.sid, messageBody: message_body };
   } catch (err) {
-    const errorMessage = err instanceof Error ? err.message : String(err);
-    console.error(`[twilio-service] Failed to send WhatsApp to ${to}:`, errorMessage);
-    return { status: "failed", errorMessage, messageBody };
+    const error_message = err instanceof Error ? err.message : String(err);
+    console.error(`[twilio-service] Failed to send WhatsApp to ${to}:`, error_message);
+    return { status: "failed" as TWhatsAppStatus, errorMessage: error_message, messageBody: message_body };
   }
-}
+};
 
-/**
- * Returns the composed message body without sending it.
- * Used by the dashboard's WhatsApp preview panel.
- */
-export function previewWhatsAppMessage(
-  result: UnderwritingResult,
-  mode: Mode
-): string {
-  return mode === "credit"
-    ? composeCreditMessage(result)
-    : composeInsuranceMessage(result);
-}
+export const preview_whatsapp_message = (result: TUnderwritingResultRow, mode: TUnderWritingMode): string =>
+  compose_message(result, mode);
+
+export const sendWhatsAppOffer = send_whatsapp_offer;
+export const previewWhatsAppMessage = preview_whatsapp_message;
