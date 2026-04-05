@@ -1,30 +1,18 @@
 import { neon, neonConfig } from "@neondatabase/serverless";
+import { ENV } from "../constants/env.js";
 
-// Neon recommends using HTTP fetch transport for serverless environments
 neonConfig.fetchConnectionCache = true;
 
-function getConnectionString(): string {
-  const url = process.env.DATABASE_URL;
-  if (!url) {
+const get_connection_string = (): string => {
+  if (!ENV.DB_URL || ENV.DB_URL === "not-set") {
     throw new Error("DATABASE_URL environment variable is not set");
   }
-  return url;
-}
+  return ENV.DB_URL;
+};
 
-/**
- * Returns a tagged-template SQL executor connected to Neon.
- * Each call creates a new HTTP connection (stateless, safe for serverless).
- */
-export function getDb() {
-  return neon(getConnectionString());
-}
+export const getDb = () => neon(get_connection_string());
 
-/**
- * Runs a raw SQL string against Neon.
- * Use only for DDL / migrations, not for parameterised queries.
- * Splits on semicolons and executes each statement sequentially.
- */
-export async function runRaw(sql: string): Promise<void> {
+export const runRaw = async (sql: string): Promise<void> => {
   const db = getDb();
   const statements = sql
     .split(";")
@@ -32,6 +20,6 @@ export async function runRaw(sql: string): Promise<void> {
     .filter(Boolean);
 
   for (const stmt of statements) {
-    await db.unsafe(stmt);
+    db.unsafe(stmt);
   }
-}
+};

@@ -1,11 +1,14 @@
 import express from "express";
-import "dotenv/config";
+import router from "./routes/index.js";
 
 const app = express();
+app.use(express.urlencoded({ extended: true }))
 app.use(express.json());
 
-app.get("/", (req, res) => {
-  res.send("API running 🚀");
+app.use("/api/v1", router);
+
+app.get("/", (_req, res) => {
+  res.json({ status: "ok", message: "Merchant Underwriting API" });
 });
 
 export default app;
