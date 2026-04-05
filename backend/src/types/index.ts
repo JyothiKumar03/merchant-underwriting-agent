@@ -103,10 +103,10 @@ export type InsuranceOffer = TInsuranceOffer;
 
 export const ZRationaleOutput = z.object({
   user_message: z.string().describe(
-    "Short, warm 2-3 sentence WhatsApp message sent directly to the merchant. Mention the offer/rejection outcome and one key reason. Use plain language."
+    "3-5 warm sentences sent directly to the merchant over WhatsApp. State the outcome and 1-2 reasons in plain language. No internal scores, no offer amounts. End with a clear next step."
   ),
   analyst_explanation: z.string().describe(
-    "Detailed 3-5 sentence internal rationale with specific numbers, benchmarks, and scoring breakdown. Used for dashboard and records."
+    "3-5 sentences of internal analyst reasoning — NEVER shown to the merchant. Cover: (1) what drove the decision with specific numbers, (2) confidence in the data quality, (3) any edge cases or risk flags. Show reasoning, not just a summary."
   ),
 });
 
@@ -230,3 +230,23 @@ export const AcceptOfferRequestSchema = ZAcceptOfferBody;
 export type SendOfferRequest = z.infer<typeof ZSendOfferBody>;
 export type AcceptOfferRequest = z.infer<typeof ZAcceptOfferBody>;
 export type UnderwriteRequest = z.infer<typeof ZUnderwriteBody>;
+
+// Merchant creation
+
+export const ZMerchantInput = z.object({
+  name: z.string().min(1, "Name is required").max(255),
+  category: z.enum(CATEGORY),
+  contact_whatsapp: z.string().min(10, "Invalid WhatsApp number").max(20),
+  months_on_platform: z.number().int().min(0),
+  total_deals_listed: z.number().int().min(0),
+  monthly_gmv_12m: z.array(z.number().min(0)).length(12, "Exactly 12 monthly GMV values required"),
+  coupon_redemption_rate: z.number().min(0).max(1),
+  unique_customer_count: z.number().int().min(0),
+  customer_return_rate: z.number().min(0).max(1),
+  avg_order_value: z.number().min(0),
+  seasonality_index: z.number().min(1),
+  deal_exclusivity_rate: z.number().min(0).max(1),
+  return_and_refund_rate: z.number().min(0).max(1),
+});
+
+export type TMerchantInput = z.infer<typeof ZMerchantInput>;

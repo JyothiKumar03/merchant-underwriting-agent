@@ -10,6 +10,8 @@ import type {
   TScoringBreakdown,
   TCreditOffer,
   TInsuranceOffer,
+  TMerchantProfile,
+  TMerchantInput,
 } from "../types/index.js";
 
 export const run_migrations = async (): Promise<void> => {
@@ -72,6 +74,30 @@ export const run_migrations = async (): Promise<void> => {
   await db`
     CREATE INDEX IF NOT EXISTS idx_whatsapp_logs_merchant
       ON whatsapp_logs (merchant_id, sent_at DESC)
+  `;
+
+  await db`CREATE SEQUENCE IF NOT EXISTS merchant_id_seq START WITH 1 INCREMENT BY 1`;
+
+  await db`
+    CREATE TABLE IF NOT EXISTS merchants (
+      id                     SERIAL PRIMARY KEY,
+      merchant_id            VARCHAR(20)   NOT NULL UNIQUE,
+      name                   VARCHAR(255)  NOT NULL,
+      category               VARCHAR(30)   NOT NULL
+                               CHECK (category IN ('fashion_beauty','travel','health_wellness','electronics','food_delivery')),
+      contact_whatsapp       VARCHAR(20)   NOT NULL,
+      months_on_platform     INTEGER       NOT NULL,
+      total_deals_listed     INTEGER       NOT NULL,
+      monthly_gmv_12m        JSONB         NOT NULL,
+      coupon_redemption_rate NUMERIC(5,4)  NOT NULL,
+      unique_customer_count  INTEGER       NOT NULL,
+      customer_return_rate   NUMERIC(5,4)  NOT NULL,
+      avg_order_value        NUMERIC(10,2) NOT NULL,
+      seasonality_index      NUMERIC(5,2)  NOT NULL,
+      deal_exclusivity_rate  NUMERIC(5,4)  NOT NULL,
+      return_and_refund_rate NUMERIC(5,4)  NOT NULL,
+      created_at             TIMESTAMPTZ   NOT NULL DEFAULT NOW()
+    )
   `;
 };
 
@@ -285,6 +311,79 @@ export const get_merchant_id_by_whatsapp = async (
   `;
   return fallback_rows.length > 0 ? (fallback_rows[0]["merchant_id"] as string) : null;
 };
+
+export const insert_merchant = async (data: TMerchantInput): Promise<TMerchantProfile> => {
+  const db = getDb();
+  const seq_rows = await db`SELECT nextval('merchant_id_seq') AS next_id`;
+  const next_id = seq_rows[0]["next_id"] as number;
+  const merchant_id = `MER_D${String(next_id).padStart(3, "0")}`;
+
+  await db`
+    INSERT INTO merchants (
+      merchant_id, name, category, contact_whatsapp,
+      months_on_platform, total_deals_listed, monthly_gmv_12m,
+      coupon_redemption_rate, unique_customer_count, customer_return_rate,
+      avg_order_value, seasonality_index, deal_exclusivity_rate, return_and_refund_rate
+    ) VALUES (
+      ${merchant_id}, ${data.name}, ${data.category}, ${data.contact_whatsapp},
+      ${data.months_on_platform}, ${data.total_deals_listed}, ${JSON.stringify(data.monthly_gmv_12m)},
+      ${data.coupon_redemption_rate}, ${data.unique_customer_count}, ${data.customer_return_rate},
+      ${data.avg_order_value}, ${data.seasonality_index}, ${data.deal_exclusivity_rate},
+      ${data.return_and_refund_rate}
+    )
+  `;
+
+  return { merchant_id, ...data };
+};
+
+export const bulk_insert_merchants = async (
+  rows: TMerchantInput[]
+): Promise<{ inserted: TMerchantProfile[]; failed: { row: number; error: string }[] }> => {
+  const inserted: TMerchantProfile[] = [];
+  const failed: { row: number; error: string }[] = [];
+
+  for (let i = 0; i < rows.length; i++) {
+    try {
+      const merchant = await insert_merchant(rows[i]);
+      inserted.push(merchant);
+    } catch (err) {
+      failed.push({ row: i + 2, error: err instanceof Error ? err.message : "Unknown error" });
+    }
+  }
+
+  return { inserted, failed };
+};
+
+export const get_all_db_merchants = async (): Promise<TMerchantProfile[]> => {
+  const db = getDb();
+  const rows = await db`SELECT * FROM merchants ORDER BY created_at ASC`;
+  return rows.map(map_merchant_row);
+};
+
+export const get_db_merchant_by_id = async (
+  merchant_id: string
+): Promise<TMerchantProfile | null> => {
+  const db = getDb();
+  const rows = await db`SELECT * FROM merchants WHERE merchant_id = ${merchant_id}`;
+  return rows.length > 0 ? map_merchant_row(rows[0]) : null;
+};
+
+const map_merchant_row = (row: Record<string, unknown>): TMerchantProfile => ({
+  merchant_id: row["merchant_id"] as string,
+  name: row["name"] as string,
+  category: row["category"] as TMerchantProfile["category"],
+  contact_whatsapp: row["contact_whatsapp"] as string,
+  months_on_platform: Number(row["months_on_platform"]),
+  total_deals_listed: Number(row["total_deals_listed"]),
+  monthly_gmv_12m: row["monthly_gmv_12m"] as number[],
+  coupon_redemption_rate: Number(row["coupon_redemption_rate"]),
+  unique_customer_count: Number(row["unique_customer_count"]),
+  customer_return_rate: Number(row["customer_return_rate"]),
+  avg_order_value: Number(row["avg_order_value"]),
+  seasonality_index: Number(row["seasonality_index"]),
+  deal_exclusivity_rate: Number(row["deal_exclusivity_rate"]),
+  return_and_refund_rate: Number(row["return_and_refund_rate"]),
+});
 
 const map_result_row = (row: Record<string, unknown>): TUnderwritingResultRow => ({
   id: row["id"] as number,

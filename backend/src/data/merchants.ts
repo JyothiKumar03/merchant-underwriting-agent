@@ -213,6 +213,7 @@ export const merchants: TMerchantProfile[] = [
   },
 ];
 
-export const get_merchant_by_id = (id: string): TMerchantProfile | undefined => {
-  return merchants.find((m) => m.merchant_id === id);
-}
+export const get_all_static_merchants = (): TMerchantProfile[] => merchants;
+
+export const get_merchant_by_id = (id: string): TMerchantProfile | undefined =>
+  merchants.find((m) => m.merchant_id === id);
