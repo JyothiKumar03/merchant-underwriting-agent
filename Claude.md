@@ -75,3 +75,5 @@ export function UserCard() {
 
 - Always use ARROW functions, no function keyword function
 - Make sure that all variables, functions are `snake_case`, file names: kebab-case, types: TCamelCase
+- Always use types, not interfaces
+- Make use of modular functions, arrow functions, exports, reusable types and functions.
