@@ -19,7 +19,7 @@ Dashboard that scores 10 GrabOn merchants for credit risk, generates a working-c
 | Runtime    | Node.js 20 + TypeScript                |
 | Framework  | Next.js 15 (App Router) — fullstack    |
 | Database   | PostgreSQL via `postgres` (tagged SQL)  |
-| AI         | `@anthropic-ai/sdk` → Claude Sonnet    |
+| AI         | Vercel AI SDK (`ai` + `@ai-sdk/anthropic` / `@ai-sdk/openai`) — multi-provider |
 | Messaging  | `twilio` (WhatsApp Sandbox — freeform)  |
 | UI         | shadcn/ui + Tailwind CSS               |
 
@@ -200,7 +200,9 @@ Tier premium multiplier: Tier 1 = 0.85, Tier 2 = 1.00, Tier 3 = 1.20.
 
 **Input to Claude:** merchant profile, all 5 sub-scores + composite, tier, the calculated offer for that mode, category benchmark.
 
-**Output:** 3–5 sentence plain text rationale. No JSON, no bullets. Must reference specific numbers.
+**Output:** Structured JSON via `generateObject` (Vercel AI SDK) with two fields:
+- `user_message` — short, WhatsApp-ready message sent directly to the merchant
+- `analyst_explanation` — detailed internal rationale with specific numbers, stored for dashboard
 
 **Caching logic:** If user switches mode and the other rationale already exists in DB → serve from DB. If empty → call Claude once, patch the row.
 
@@ -215,12 +217,14 @@ Tier premium multiplier: Tier 1 = 0.85, Tier 2 = 1.00, Tier 3 = 1.20.
 | `id`                   | SERIAL PK     |                                                          |
 | `merchant_id`          | VARCHAR(20)   | UNIQUE                                                   |
 | `merchant_name`        | VARCHAR(255)  |                                                          |
-| `risk_tier`            | VARCHAR(20)   | `Tier 1` · `Tier 2` · `Tier 3` · `Rejected`             |
+| `risk_tier`            | VARCHAR(20)   | `tier_1` · `tier_2` · `tier_3` · `rejected`             |
 | `scoring`              | JSONB         | All sub-scores + composite + pre_filter fields           |
 | `credit_offer`         | JSONB / NULL  |                                                          |
 | `insurance_offer`      | JSONB / NULL  |                                                          |
-| `credit_rationale`     | TEXT          | Empty until credit mode is run                           |
-| `insurance_rationale`  | TEXT          | Empty until insurance mode is run                        |
+| `credit_rationale`     | TEXT          | Analyst explanation — empty until credit mode is run     |
+| `credit_user_message`  | TEXT          | WhatsApp-ready message — empty until credit mode is run  |
+| `insurance_rationale`  | TEXT          | Analyst explanation — empty until insurance mode is run  |
+| `insurance_user_message` | TEXT        | WhatsApp-ready message — empty until insurance mode is run |
 | `offer_status`         | VARCHAR(25)   | `not_underwritten` → `underwritten` → `offer_sent` → `mandate_active` |
 | `whatsapp_status`      | VARCHAR(10)   | `not_sent` / `sent` / `failed`                           |
 | `whatsapp_message_sid` | VARCHAR(64)   |                                                          |
@@ -349,6 +353,23 @@ Sends WhatsApp via Twilio for selected mode.
 
 ---
 
+### `POST /api/underwrite/send-offer/webhook`
+
+Twilio posts here when merchant replies to a WhatsApp offer message.
+
+**Form fields (Twilio):** `From`, `WaId`, `Body`
+
+**Backend logic:**
+1. Normalize `Body` to lowercase — only react to `accept` or `reject`, ignore everything else
+2. Resolve merchant from `WaId` (`+{WaId}`) — prefer merchant with `offer_status = 'offer_sent'` at that number
+3. `reject` → reply with decline acknowledgement via TwiML `<Message>`
+4. `accept` → generate UMRN, set `mandate_active`, reply with NACH confirmation via TwiML `<Message>`
+5. Idempotent — if already `mandate_active`, resend confirmation
+
+**Response:** TwiML `<Response><Message>...</Message></Response>`
+
+---
+
 ### `POST /api/accept-offer`
 
 Mock NACH mandate.
@@ -394,9 +415,14 @@ Tier 3 rows additionally show **"Manual Review Recommended"** badge.
 ### Status Flow
 
 ```
-Pending ──[Underwrite]──▶ Underwritten ──[Send WhatsApp]──▶ Offer Sent ──[Accept]──▶ Mandate Active
-                              │
+Pending ──[Underwrite]──▶ Underwritten ──[Send WhatsApp]──▶ Offer Sent ──[Accept via dashboard]──▶ Mandate Active
+                              │                                    │
                               └── Rejected ──[Send WhatsApp]──▶ Rejection Sent
+                                                                   │
+                                                        Merchant replies ACCEPT/REJECT
+                                                        on WhatsApp → webhook fires
+                                                                   │
+                                                              Mandate Active
 ```
 
 ---
