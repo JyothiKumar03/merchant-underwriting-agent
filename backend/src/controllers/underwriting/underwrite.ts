@@ -6,6 +6,7 @@ import {
   get_result_by_merchant,
   upsert_underwriting_result,
   patch_rationale,
+  get_db_merchant_by_id,
 } from "../../models/schema.js";
 import { run_scoring } from "../../utils/scoring-engine.js";
 import { calc_both_offers } from "../../utils/offer-calculator.js";
@@ -48,8 +49,8 @@ export const underwrite = async (req: Request, res: Response): Promise<void> => 
     throw err;
   }
 
-  // 2. Find merchant
-  const merchant = get_merchant_by_id(id);
+  // 2. Find merchant — check static data first, then DB
+  const merchant = get_merchant_by_id(id) ?? await get_db_merchant_by_id(id);
   if (!merchant) {
     res.status(HTTP.NOT_FOUND).json({ error: `Merchant ${id} not found` });
     return;
@@ -146,37 +147,40 @@ const build_fallback_rationale = (
   credit_offer: TCreditOffer | null,
   insurance_offer: TInsuranceOffer | null
 ): TRationaleOutput => {
+  const ret_pct = (merchant.customer_return_rate * 100).toFixed(1);
+  const ref_pct = (merchant.return_and_refund_rate * 100).toFixed(1);
+  const score = scoring.composite_score.toFixed(1);
+
   if (!scoring.pre_filter_passed) {
-    const msg = `Hi ${merchant.name}, unfortunately your profile doesn't meet our minimum eligibility criteria right now. ${scoring.pre_filter_reason ?? "Keep growing on the platform and reapply in a few months!"}`;
     return {
-      user_message: msg,
-      analyst_explanation: `${merchant.name} did not qualify for a pre-approved offer. ${scoring.pre_filter_reason ?? "The merchant profile does not meet minimum eligibility criteria."}. We encourage the merchant to continue growing on the platform and reapply once the highlighted criteria are met.`,
+      user_message: `Hi ${merchant.name}, we reviewed your profile but it doesn't meet our minimum eligibility criteria at this stage. ${scoring.pre_filter_reason ?? "We look at platform tenure and average monthly sales to ensure offers are suitable for your business."}  We encourage you to keep growing on the platform and reapply in a few months — we'd love to support you then!`,
+      analyst_explanation: `${merchant.name} was rejected at the pre-filter stage. Reason: ${scoring.pre_filter_reason ?? "did not meet minimum eligibility criteria"}. Confidence is high — this is a hard rule, not a scoring judgment. No offer should be generated until the failing criterion is resolved.`,
     };
   }
 
   if (tier === "rejected") {
     return {
-      user_message: `Hi ${merchant.name}, your composite risk score of ${scoring.composite_score}/100 fell below our minimum threshold. Your customer return rate of ${(merchant.customer_return_rate * 100).toFixed(1)}% and refund rate of ${(merchant.return_and_refund_rate * 100).toFixed(1)}% were key factors. We'll re-evaluate quarterly!`,
-      analyst_explanation: `${merchant.name} passed initial eligibility checks but received a composite risk score of ${scoring.composite_score}/100, below the minimum threshold of 30. The primary drag was low customer loyalty (${(merchant.customer_return_rate * 100).toFixed(1)}%) and elevated refund rates (${(merchant.return_and_refund_rate * 100).toFixed(1)}%). We recommend improving platform engagement and reducing refunds over the next 3-6 months before reapplying.`,
+      user_message: `Hi ${merchant.name}, after reviewing your business performance we're unable to extend an offer at this time. Your composite risk score came in below our minimum threshold, driven mainly by customer retention and refund levels. We re-evaluate quarterly — keep growing your loyal customer base and reducing returns, and we'd be happy to review your profile again soon!`,
+      analyst_explanation: `${merchant.name} passed pre-filter but scored ${score}/100 (threshold: 30). Low loyalty score driven by ${ret_pct}% customer return rate and elevated quality risk from ${ref_pct}% refund rate were the primary drag factors. Confidence: moderate — borderline cases at this tier benefit from manual review. Recommend re-scoring in 3–6 months if merchant addresses loyalty and refund metrics.`,
     };
   }
 
   if (mode === "credit" && credit_offer) {
     return {
-      user_message: `Great news, ${merchant.name}! You've been pre-approved for a GrabCredit working capital loan. Your strong customer return rate of ${(merchant.customer_return_rate * 100).toFixed(1)}% helped you qualify. Reply ACCEPT to proceed!`,
-      analyst_explanation: `${merchant.name} has been approved for a working capital credit limit of Rs.${(credit_offer.credit_limit_inr / 100_000).toFixed(1)}L at ${credit_offer.interest_rate_percent}% p.a. under ${tier.replace("_", " ")} (composite score: ${scoring.composite_score}/100). The merchant demonstrates a customer return rate of ${(merchant.customer_return_rate * 100).toFixed(1)}% and a refund rate of ${(merchant.return_and_refund_rate * 100).toFixed(1)}%, reflecting demand stability and product quality.`,
+      user_message: `Great news, ${merchant.name}! We've reviewed your GrabOn performance and you've been pre-approved for a GrabCredit working capital loan. Your strong repeat customer base and consistent sales history helped you qualify. Reply ACCEPT to proceed and our team will guide you through the next steps!`,
+      analyst_explanation: `${merchant.name} approved for GrabCredit under ${tier.replace("_", " ")} with composite score ${score}/100. Credit limit Rs.${(credit_offer.credit_limit_inr / 100_000).toFixed(1)}L at ${credit_offer.interest_rate_percent}% p.a. Key positives: ${ret_pct}% customer return rate and ${ref_pct}% refund rate. Confidence: high for this tier. Fallback rationale used — AI call failed.`,
     };
   }
 
   if (mode === "insurance" && insurance_offer) {
     return {
-      user_message: `Great news, ${merchant.name}! You're eligible for a GrabInsurance business cover with Rs.${(insurance_offer.coverage_amount_inr / 100_000).toFixed(1)}L coverage. Reply ACCEPT to activate your policy!`,
-      analyst_explanation: `${merchant.name} has been approved for ${insurance_offer.policy_type} with Rs.${(insurance_offer.coverage_amount_inr / 100_000).toFixed(1)}L coverage at Rs.${(insurance_offer.annual_premium_inr / 1_000).toFixed(1)}K annual premium under ${tier.replace("_", " ")} (composite score: ${scoring.composite_score}/100).`,
+      user_message: `Great news, ${merchant.name}! Based on your GrabOn business profile you're eligible for a GrabInsurance business cover. This policy is tailored to your category and designed to protect your revenue during unexpected disruptions. Reply ACCEPT to activate your cover and our team will be in touch!`,
+      analyst_explanation: `${merchant.name} approved for ${insurance_offer.policy_type} under ${tier.replace("_", " ")} with composite score ${score}/100. Coverage Rs.${(insurance_offer.coverage_amount_inr / 100_000).toFixed(1)}L at Rs.${(insurance_offer.annual_premium_inr / 1_000).toFixed(1)}K annual premium. Confidence: high for this tier. Fallback rationale used — AI call failed.`,
     };
   }
 
   return {
-    user_message: "We encountered an issue generating your offer. Our team will reach out shortly.",
-    analyst_explanation: "Rationale could not be generated. Please contact support.",
+    user_message: "We encountered an issue generating your offer details. Our team will reach out shortly with your personalised offer.",
+    analyst_explanation: "Rationale could not be generated — AI call failed and no offer mode matched. Manual review required.",
   };
 };

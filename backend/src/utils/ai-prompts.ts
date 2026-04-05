@@ -16,22 +16,46 @@ export const RATIONALE_MODELS: TAiModel[] = [
 
 export const RATIONALE_SYSTEM_PROMPT = `You are a senior financial underwriting analyst at GrabOn.
 
-You must return a JSON object with exactly two fields:
+Return a JSON object with exactly two fields:
 
-1. "user_message": A short, warm 2-3 sentence WhatsApp message addressed directly to the merchant.
-   - Mention the outcome (approved/rejected) and one key reason with a specific number.
-   - Friendly, plain language. No jargon.
-   - Do NOT include offer amounts or interest rates — those are added separately.
+1. "user_message"
+   - 3-5 warm sentences sent directly to the merchant over WhatsApp.
+   - State the outcome (approved / rejected) and 1-2 reasons in plain language.
+   - Do NOT mention internal score numbers, offer amounts, or interest rates.
+   - End with a clear next step (e.g. "Reply ACCEPT to proceed" or "Reapply in 3 months").
 
-2. "analyst_explanation": A detailed 3-5 sentence internal rationale.
-   - Reference SPECIFIC numbers (exact %, exact Rs. amounts).
-   - Compare to category averages where relevant.
-   - For rejections: what failed and what to improve.
-   - For Tier 3: acknowledge risks while noting positives.
+2. "analyst_explanation"
+   - 3-5 sentences of internal reasoning — NEVER shown to the merchant.
+   - Explain: (1) what primarily drove the decision, citing specific numbers from the prompt;
+     (2) your confidence in the data (e.g. sparse GMV months, high seasonality);
+     (3) any edge cases, risk flags, or borderline factors worth noting.
+   - This is the analyst audit trail, not a summary — show your reasoning.
 
-RULES for both fields:
-- Do NOT invent data. Only use numbers provided in the prompt.
-- No headers, no bullet points inside the strings.`;
+STRICT RULES:
+- Use only numbers provided in the prompt. Do not invent or extrapolate.
+- Sub-scores are normalized indices 0–100, NOT percentage growth rates.
+  Never write "GMV growth of 63.2%" — write "GMV growth score 63.2/100".
+- Metric directions are stated explicitly in the METHODOLOGY section. Follow them precisely.
+- No bullet points or headers inside either string value.`;
+
+// ---------- helpers (mirror scoring-engine logic for prompt derivation) ----------
+
+const avg = (vals: number[]): number =>
+  vals.length === 0 ? 0 : vals.reduce((a, b) => a + b, 0) / vals.length;
+
+const stddev = (vals: number[], mean: number): number => {
+  if (vals.length < 2) return 0;
+  return Math.sqrt(vals.reduce((s, v) => s + Math.pow(v - mean, 2), 0) / vals.length);
+};
+
+const fmt_inr = (n: number): string => {
+  if (n >= 100_000) return `₹${(n / 100_000).toFixed(2)}L`;
+  return `₹${n.toLocaleString("en-IN")}`;
+};
+
+const pct = (r: number): string => `${(r * 100).toFixed(1)}%`;
+
+// ---------- main prompt builder ----------
 
 export const build_rationale_prompt = (
   mode: TUnderWritingMode,
@@ -42,52 +66,92 @@ export const build_rationale_prompt = (
   insurance_offer: TInsuranceOffer | null,
   benchmark: TCategoryBenchmark
 ): string => {
-  const non_zero_gmv = merchant.monthly_gmv_12m.filter((v) => v > 0);
-  const avg_gmv_inr =
-    non_zero_gmv.length > 0
-      ? non_zero_gmv.reduce((a, b) => a + b, 0) / non_zero_gmv.length
-      : 0;
+  const non_zero = merchant.monthly_gmv_12m.filter((v) => v > 0);
+  const avg_gmv = avg(non_zero);
 
+  // GMV growth derivation
+  const mid = Math.floor(non_zero.length / 2);
+  const first_half = non_zero.slice(0, mid);
+  const second_half = non_zero.slice(mid);
+  const avg_h1 = avg(first_half);
+  const avg_h2 = avg(second_half);
+  const growth_pct = avg_h1 > 0 ? ((avg_h2 - avg_h1) / avg_h1) * 100 : 0;
+
+  // Stability derivation
+  const mean_gmv = avg_gmv;
+  const cv = mean_gmv > 0 ? stddev(non_zero, mean_gmv) / mean_gmv : 0;
+
+  // Loyalty ratio
+  const loyalty_ratio = benchmark.avg_return_rate > 0
+    ? merchant.customer_return_rate / benchmark.avg_return_rate
+    : 1;
+
+  // Quality ratio
+  const quality_ratio = benchmark.avg_refund_rate > 0
+    ? merchant.return_and_refund_rate / benchmark.avg_refund_rate
+    : 1;
+
+  // Engagement tenure fraction
+  const tenure_frac = Math.min(merchant.months_on_platform / 36, 1);
+
+  // Offer line
   let offer_line: string;
   if (tier === "rejected") {
-    offer_line = "No offer extended.";
+    offer_line = "No offer — merchant did not qualify.";
   } else if (mode === "credit" && credit_offer) {
-    offer_line = `Credit Limit: Rs.${(credit_offer.credit_limit_inr / 100_000).toFixed(1)}L | Rate: ${credit_offer.interest_rate_percent}% p.a. | Tenure: ${credit_offer.tenure_options_months.join("/")} months`;
+    offer_line = `Credit limit: ${fmt_inr(credit_offer.credit_limit_inr)} | Rate: ${credit_offer.interest_rate_percent}% p.a. | Tenure: ${credit_offer.tenure_options_months.join("/")} months`;
   } else if (mode === "insurance" && insurance_offer) {
-    offer_line = `Coverage: Rs.${(insurance_offer.coverage_amount_inr / 100_000).toFixed(1)}L | Premium: Rs.${insurance_offer.quarterly_premium_inr.toLocaleString("en-IN")}/qtr | Policy: ${insurance_offer.policy_type}`;
+    offer_line = `Coverage: ${fmt_inr(insurance_offer.coverage_amount_inr)} | Premium: ${fmt_inr(insurance_offer.quarterly_premium_inr)}/qtr | Policy: ${insurance_offer.policy_type}`;
   } else {
     offer_line = "No offer for this mode.";
   }
 
   const tier_label = tier === "rejected"
-    ? "Rejected"
-    : tier.replace("_", " ").replace(/\b\w/g, (c) => c.toUpperCase());
+    ? "REJECTED"
+    : tier.replace("_", " ").toUpperCase();
 
-  return `MODE: ${mode === "credit" ? "GrabCredit (Working Capital Loan)" : "GrabInsurance (Business Interruption Cover)"}
+  const gmv_series = merchant.monthly_gmv_12m
+    .map((v) => (v === 0 ? "₹0" : fmt_inr(v)))
+    .join(", ");
 
-MERCHANT:
-- Name: ${merchant.name}
-- Category: ${merchant.category.replace("_", " ")}
-- Months on Platform: ${merchant.months_on_platform}
-- Avg Monthly GMV: Rs.${(avg_gmv_inr / 100_000).toFixed(1)}L
-- Monthly GMV (12m): ${merchant.monthly_gmv_12m.map((v) => `Rs.${(v / 100_000).toFixed(1)}L`).join(", ")}
-- Customer Return Rate: ${(merchant.customer_return_rate * 100).toFixed(1)}% (Category Avg: ${(benchmark.avg_return_rate * 100).toFixed(1)}%)
-- Refund Rate: ${(merchant.return_and_refund_rate * 100).toFixed(1)}% (Category Avg: ${(benchmark.avg_refund_rate * 100).toFixed(1)}%)
-- Coupon Redemption Rate: ${(merchant.coupon_redemption_rate * 100).toFixed(1)}%
-- Deal Exclusivity Rate: ${(merchant.deal_exclusivity_rate * 100).toFixed(1)}%
-- Seasonality Index: ${merchant.seasonality_index}
+  return `MODE: ${mode === "credit" ? "GrabCredit (working capital loan)" : "GrabInsurance (business interruption cover)"}
 
-SCORES:
-- GMV Growth: ${scoring.gmv_growth_score}/100 (25%)
-- Stability:  ${scoring.stability_score}/100 (20%)
-- Loyalty:    ${scoring.loyalty_score}/100 (20%)
-- Quality:    ${scoring.quality_score}/100 (20%)
-- Engagement: ${scoring.engagement_score}/100 (15%)
-- Composite:  ${scoring.composite_score}/100
-${!scoring.pre_filter_passed ? `- Pre-filter rejection: ${scoring.pre_filter_reason}` : ""}
+━━ SOURCE DATA — raw merchant inputs ━━
+Business: ${merchant.name}
+Category: ${merchant.category.replace(/_/g, " ")} | Platform tenure: ${merchant.months_on_platform} months | Deals listed: ${merchant.total_deals_listed}
+Monthly GMV (M1–M12): ${gmv_series}
+Non-zero months: ${non_zero.length} of 12 | Avg monthly GMV: ${fmt_inr(avg_gmv)}
+Customer return rate: ${pct(merchant.customer_return_rate)} | Refund rate: ${pct(merchant.return_and_refund_rate)} | Coupon redemption: ${pct(merchant.coupon_redemption_rate)}
+Deal exclusivity: ${pct(merchant.deal_exclusivity_rate)} | Avg order value: ${fmt_inr(merchant.avg_order_value)} | Seasonality index: ${merchant.seasonality_index.toFixed(2)}
 
-DECISION: ${tier_label}
-OFFER: ${offer_line}
+━━ RISK SCORING METHODOLOGY ━━
+Each score is a normalized index 0–100. They are NOT percentage growth rates.
+
+1. GMV GROWTH (weight 25%) → score: ${scoring.gmv_growth_score.toFixed(1)}/100
+   • Source: first-half avg ${fmt_inr(avg_h1)} vs second-half avg ${fmt_inr(avg_h2)} across ${non_zero.length} active months.
+   • Method: raw_growth = (H2 − H1) / H1 = ${growth_pct.toFixed(1)}%. Score = clamp(50 + growth×1, 0, 100). Score 50 = flat; 100 = +50% growth; 0 = −50% decline.
+
+2. STABILITY (weight 20%) → score: ${scoring.stability_score.toFixed(1)}/100
+   • Source: coefficient of variation (CV) of non-zero GMV months = ${cv.toFixed(3)} (stddev/mean).
+   • Method: score = clamp((1 − CV) × 100, 0, 100). Low CV = predictable cash flows = high score.
+
+3. LOYALTY (weight 20%) → score: ${scoring.loyalty_score.toFixed(1)}/100
+   • Source: merchant return rate ${pct(merchant.customer_return_rate)} vs category benchmark ${pct(benchmark.avg_return_rate)}.
+   • Method: ratio = merchant / benchmark = ${loyalty_ratio.toFixed(2)}. Score = clamp((ratio − 0.5) × 100, 0, 100). HIGHER return rate = MORE repeat buyers = POSITIVE signal.
+
+4. QUALITY (weight 20%) → score: ${scoring.quality_score.toFixed(1)}/100
+   • Source: merchant refund rate ${pct(merchant.return_and_refund_rate)} vs category benchmark ${pct(benchmark.avg_refund_rate)}.
+   • Method: ratio = merchant / benchmark = ${quality_ratio.toFixed(2)}. Score = clamp(((2.0 − ratio) / 1.5) × 100, 0, 100). LOWER refund rate = better quality = POSITIVE signal.
+
+5. ENGAGEMENT (weight 15%) → score: ${scoring.engagement_score.toFixed(1)}/100
+   • Source: coupon redemption ${pct(merchant.coupon_redemption_rate)}, deal exclusivity ${pct(merchant.deal_exclusivity_rate)}, tenure ${merchant.months_on_platform} months (${(tenure_frac * 100).toFixed(0)}% of 36-month cap).
+   • Method: score = (redemption × 0.4 + exclusivity × 0.3 + tenure_frac × 0.3) × 100. Higher platform commitment = higher score.
+
+COMPOSITE: ${scoring.composite_score.toFixed(1)}/100${!scoring.pre_filter_passed ? `\nPRE-FILTER FAILED: ${scoring.pre_filter_reason}` : ""}
+
+━━ DECISION ━━
+Tier: ${tier_label}
+Offer: ${offer_line}
 
 Return the JSON object now:`;
 };
