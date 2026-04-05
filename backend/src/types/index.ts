@@ -1,26 +1,24 @@
 import { z } from "zod";
+import {
+  RISK_TIER,
+  UNDER_WRITING_MODE,
+  OFFER_STATUS,
+  WHATSAPP_STATUS,
+  CATEGORY,
+} from "../constants";
 
-// ── Enums / Literals ────────────────────────────────────────────────────────
+export type TUnderWritingMode = (typeof UNDER_WRITING_MODE)[number];
+export type TRiskTier = (typeof RISK_TIER)[number];
+export type TOfferStatus = (typeof OFFER_STATUS)[number];
+export type TWhatsAppStatus = (typeof WHATSAPP_STATUS)[number];
+export type TCategory = (typeof CATEGORY)[number];
 
-/** Used when sending a WhatsApp offer — pick which product to send */
-export type Mode = "credit" | "insurance";
+// Core domain types
 
-export type RiskTier = "tier_1" | "tier_2" | "tier_3" | "rejected";
-
-export type OfferStatus =
-  | "not_underwritten"
-  | "underwritten"
-  | "offer_sent"
-  | "mandate_active";
-
-export type WhatsAppStatus = "not_sent" | "sent" | "failed";
-
-// ── Core Domain Types ───────────────────────────────────────────────────────
-
-export interface MerchantProfile {
+export type TMerchantProfile = {
   merchant_id: string;
   name: string;
-  category: string;
+  category: TCategory;
   contact_whatsapp: string;
   months_on_platform: number;
   total_deals_listed: number;
@@ -41,127 +39,194 @@ export interface MerchantProfile {
   return_and_refund_rate: number;
 }
 
-export interface CategoryBenchmark {
+export type TCategoryBenchmark = {
   avg_return_rate: number;
   avg_refund_rate: number;
   avg_monthly_gmv: number;
   avg_order_value: number;
-}
+};
 
-// ── Scoring ─────────────────────────────────────────────────────────────────
+export type CategoryBenchmark = TCategoryBenchmark;
 
-export interface ScoringBreakdown {
+// Config types (used by constants and utilities)
+
+export type TCreditTierConfig = {
+  multiplier: number;
+  interest_rate_percent: number;
+  tenure_options_months: number[];
+  max_credit_inr: number;
+};
+
+export type CreditTierConfig = TCreditTierConfig;
+
+export type TInsuranceCategoryConfig = {
+  policy_type: string;
+  risk_factor: number;
+};
+
+export type InsuranceCategoryConfig = TInsuranceCategoryConfig;
+
+// Scoring
+
+export type TScoringBreakdown = {
   pre_filter_passed: boolean;
   pre_filter_reason?: string;
-  /** 0–100, weight 25% */
   gmv_growth_score: number;
-  /** 0–100, weight 20% */
   stability_score: number;
-  /** 0–100, weight 20% */
   loyalty_score: number;
-  /** 0–100, weight 20% */
   quality_score: number;
-  /** 0–100, weight 15% */
   engagement_score: number;
-  /** Weighted sum of the five sub-scores */
   composite_score: number;
-}
+};
 
-// ── Offers ──────────────────────────────────────────────────────────────────
+export type ScoringBreakdown = TScoringBreakdown;
 
-export interface CreditOffer {
+// Offers
+
+export type TCreditOffer = {
   credit_limit_inr: number;
   interest_rate_percent: number;
   tenure_options_months: number[];
-}
+};
 
-export interface InsuranceOffer {
+export type TInsuranceOffer = {
   coverage_amount_inr: number;
   annual_premium_inr: number;
   quarterly_premium_inr: number;
   policy_type: string;
-}
+};
 
-// ── Underwriting Result ─────────────────────────────────────────────────────
-// One call computes BOTH credit and insurance simultaneously.
-// Mode is NOT stored on the result — it is only used when sending WhatsApp.
+export type CreditOffer = TCreditOffer;
+export type InsuranceOffer = TInsuranceOffer;
 
-export interface UnderwritingResult {
+// AI rationale — two-part structured output
+
+export const ZRationaleOutput = z.object({
+  user_message: z.string().describe(
+    "Short, warm 2-3 sentence WhatsApp message sent directly to the merchant. Mention the offer/rejection outcome and one key reason. Use plain language."
+  ),
+  analyst_explanation: z.string().describe(
+    "Detailed 3-5 sentence internal rationale with specific numbers, benchmarks, and scoring breakdown. Used for dashboard and records."
+  ),
+});
+
+export type TRationaleOutput = z.infer<typeof ZRationaleOutput>;
+
+// Underwriting result
+
+export type TUnderwritingResult = {
   merchant_id: string;
   merchant_name: string;
-  risk_tier: RiskTier;
-  scoring: ScoringBreakdown;
-  credit_offer: CreditOffer | null;
-  insurance_offer: InsuranceOffer | null;
-  /** Claude-generated rationale framed for the credit product */
+  risk_tier: TRiskTier;
+  scoring: TScoringBreakdown;
+  credit_offer: TCreditOffer | null;
+  insurance_offer: TInsuranceOffer | null;
   credit_rationale: string;
-  /** Claude-generated rationale framed for the insurance product */
+  credit_user_message: string;
   insurance_rationale: string;
-  offer_status: OfferStatus;
-  whatsapp_status: WhatsAppStatus;
+  insurance_user_message: string;
+  offer_status: TOfferStatus;
+  whatsapp_status: TWhatsAppStatus;
   whatsapp_message_sid?: string;
-  /** Set when the merchant accepts the offer (mock NACH mandate) */
   nach_umrn?: string;
   timestamp: string;
-}
+};
 
-// ── API Request / Response Shapes ───────────────────────────────────────────
+export type UnderwritingResult = TUnderwritingResult;
 
-/** POST /api/underwrite/:id — no body required, scores both products at once */
-export type UnderwriteRequest = Record<string, never>;
+// DB row types
 
-/** POST /api/send-offer — specify which product to send via WhatsApp */
-export interface SendOfferRequest {
-  merchant_id: string;
-  mode: Mode;
-}
-
-/** POST /api/accept-offer — confirm NACH mandate */
-export interface AcceptOfferRequest {
-  merchant_id: string;
-}
-
-// ── Zod Schemas (API validation) ────────────────────────────────────────────
-
-export const SendOfferRequestSchema = z.object({
-  merchant_id: z.string().min(1),
-  mode: z.enum(["credit", "insurance"]),
-});
-
-export const AcceptOfferRequestSchema = z.object({
-  merchant_id: z.string().min(1),
-});
-
-// ── DB Row Types ─────────────────────────────────────────────────────────────
-
-/** Row shape as stored in the `underwriting_results` Neon table */
-export interface UnderwritingResultRow {
+export type TUnderwritingResultRow = {
   id: number;
   merchant_id: string;
   merchant_name: string;
-  risk_tier: RiskTier;
-  scoring: ScoringBreakdown;
-  credit_offer: CreditOffer | null;
-  insurance_offer: InsuranceOffer | null;
+  risk_tier: TRiskTier;
+  scoring: TScoringBreakdown;
+  credit_offer: TCreditOffer | null;
+  insurance_offer: TInsuranceOffer | null;
   credit_rationale: string;
+  credit_user_message: string;
   insurance_rationale: string;
-  offer_status: OfferStatus;
-  whatsapp_status: WhatsAppStatus;
+  insurance_user_message: string;
+  offer_status: TOfferStatus;
+  whatsapp_status: TWhatsAppStatus;
   whatsapp_message_sid: string | null;
   nach_umrn: string | null;
   created_at: Date;
   updated_at: Date;
-}
+};
 
-/** Row shape as stored in the `whatsapp_logs` Neon table */
-export interface WhatsAppLogRow {
+export type UnderwritingResultRow = TUnderwritingResultRow;
+
+export type TWhatsAppLogRow = {
   id: number;
   merchant_id: string;
   message_sid: string | null;
   to_number: string;
   message_body: string;
-  mode: Mode;
-  status: WhatsAppStatus;
+  mode: TUnderWritingMode;
+  status: TWhatsAppStatus;
   error_message: string | null;
   sent_at: Date;
-}
+};
+
+export type WhatsAppLogRow = TWhatsAppLogRow;
+
+// AI service types
+
+export type TAiProvider = "openai" | "anthropic" | "openrouter";
+
+export type TAiModel = {
+  model_id: string;
+  provider: TAiProvider;
+};
+
+export type TAiGenerateObjectParams<T> = {
+  models: TAiModel[];
+  system: string;
+  prompt: string;
+  schema: z.ZodSchema<T>;
+  max_tokens?: number;
+  temperature?: number;
+};
+
+// Twilio types
+
+export type TTwilioConfig = {
+  accountSid: string;
+  authToken: string;
+  fromNumber: string;
+};
+
+export type TWhatsAppDeliveryResult = {
+  status: TWhatsAppStatus;
+  messageSid?: string;
+  errorMessage?: string;
+  messageBody: string;
+};
+
+// Zod schemas
+
+export const ZSendOfferBody = z.object({
+  merchantId: z.string().min(1),
+  mode: z.enum(UNDER_WRITING_MODE),
+});
+
+export const ZAcceptOfferBody = z.object({
+  merchantId: z.string().min(1),
+});
+
+export const ZUnderwriteBody = z.object({
+  mode: z.enum(UNDER_WRITING_MODE),
+});
+
+export const ZMerchantIdParam = z.object({
+  id: z.string().min(1),
+});
+
+export const SendOfferRequestSchema = ZSendOfferBody;
+export const AcceptOfferRequestSchema = ZAcceptOfferBody;
+
+export type SendOfferRequest = z.infer<typeof ZSendOfferBody>;
+export type AcceptOfferRequest = z.infer<typeof ZAcceptOfferBody>;
+export type UnderwriteRequest = z.infer<typeof ZUnderwriteBody>;

@@ -1,14 +1,36 @@
-import type { RiskTier } from "../types/index.js";
+import type {
+  TRiskTier,
+  TCategory,
+  TCreditTierConfig,
+  TInsuranceCategoryConfig,
+} from "../types/index.js";
 
-// ── Pre-Filter Thresholds ────────────────────────────────────────────────────
+export const UNDER_WRITING_MODE = ["credit", "insurance"] as const;
+
+export const RISK_TIER = ["tier_1", "tier_2", "tier_3", "rejected"] as const;
+
+export const OFFER_STATUS = [
+  "not_underwritten",
+  "underwritten",
+  "offer_sent",
+  "mandate_active",
+] as const;
+
+export const WHATSAPP_STATUS = ["not_sent", "sent", "failed"] as const;
+
+export const CATEGORY = [
+  "fashion_beauty",
+  "travel",
+  "health_wellness",
+  "electronics",
+  "food_delivery",
+] as const;
 
 export const PRE_FILTER = {
   MIN_MONTHS_ON_PLATFORM: 6,
   MIN_AVG_MONTHLY_GMV_INR: 50_000,
   MAX_REFUND_RATE: 0.10,
 } as const;
-
-// ── Scoring Weights (must sum to 1.0) ────────────────────────────────────────
 
 export const SCORING_WEIGHTS = {
   GMV_GROWTH: 0.25,
@@ -18,114 +40,84 @@ export const SCORING_WEIGHTS = {
   ENGAGEMENT: 0.15,
 } as const;
 
-// ── Tier Thresholds (composite score boundaries) ─────────────────────────────
-
 export const TIER_THRESHOLDS = {
   TIER_1_MIN: 75,
   TIER_2_MIN: 50,
   TIER_3_MIN: 30,
 } as const;
 
-// ── Credit Configuration by Tier ─────────────────────────────────────────────
-
-export interface CreditTierConfig {
-  /** Multiplier applied to average monthly GMV to get the credit limit */
-  multiplier: number;
-  interest_rate_percent: number;
-  tenure_options_months: number[];
-  max_credit_inr: number;
-}
-
-export const CREDIT_CONFIG: Record<Exclude<RiskTier, "Rejected">, CreditTierConfig> = {
-  "Tier 1": {
+export const CREDIT_CONFIG: Record<Exclude<TRiskTier, "rejected">, TCreditTierConfig> = {
+  tier_1: {
     multiplier: 6,
     interest_rate_percent: 14.5,
     tenure_options_months: [6, 12, 18],
-    max_credit_inr: 5_000_000, // ₹50L
+    max_credit_inr: 5_000_000,
   },
-  "Tier 2": {
+  tier_2: {
     multiplier: 4,
     interest_rate_percent: 16.5,
     tenure_options_months: [6, 12],
-    max_credit_inr: 2_000_000, // ₹20L
+    max_credit_inr: 2_000_000,
   },
-  "Tier 3": {
+  tier_3: {
     multiplier: 2,
     interest_rate_percent: 19.5,
     tenure_options_months: [6],
-    max_credit_inr: 500_000, // ₹5L
+    max_credit_inr: 500_000,
   },
 };
 
-// ── Insurance Configuration by Category ──────────────────────────────────────
-
-export interface InsuranceCategoryConfig {
-  policy_type: string;
-  /** Annual premium as fraction of coverage amount */
-  risk_factor: number;
-}
-
-export const INSURANCE_CATEGORY_CONFIG: Record<string, InsuranceCategoryConfig> = {
-  "Fashion & Beauty": {
+export const INSURANCE_CATEGORY_CONFIG: Record<TCategory, TInsuranceCategoryConfig> = {
+  fashion_beauty: {
     policy_type: "Inventory Protection + Business Interruption",
     risk_factor: 0.025,
   },
-  Electronics: {
+  electronics: {
     policy_type: "Inventory Protection + Transit Damage Cover",
     risk_factor: 0.03,
   },
-  "Food & Delivery": {
+  food_delivery: {
     policy_type: "Business Interruption + Liability Cover",
     risk_factor: 0.035,
   },
-  "Health & Wellness": {
+  health_wellness: {
     policy_type: "Business Interruption + Compliance Cover",
     risk_factor: 0.02,
   },
-  Travel: {
+  travel: {
     policy_type: "Business Interruption + Cancellation Cover",
     risk_factor: 0.028,
   },
 };
 
-/** Premium adjustment factor per tier (1.0 = standard, < 1.0 = discount, > 1.0 = surcharge) */
-export const TIER_PREMIUM_MULTIPLIER: Record<Exclude<RiskTier, "Rejected">, number> = {
-  "Tier 1": 0.85,
-  "Tier 2": 1.0,
-  "Tier 3": 1.2,
+export const TIER_PREMIUM_MULTIPLIER: Record<Exclude<TRiskTier, "rejected">, number> = {
+  tier_1: 0.85,
+  tier_2: 1.0,
+  tier_3: 1.2,
 };
 
-/** Coverage = average monthly GMV × this multiplier (3 months revenue protection) */
 export const INSURANCE_COVERAGE_MONTHS = 3;
 
-// ── AI Service Configuration ─────────────────────────────────────────────────
-
 export const AI_SERVICE = {
-  PRIMARY_MODEL: "claude-sonnet-4-5",
-  FALLBACK_MODEL: "claude-haiku-4-5",
-  MAX_RETRIES: 3,
-  /** Base delay in ms between retries (exponential backoff applied) */
+  MAX_RETRIES: 2,
   RETRY_BASE_DELAY_MS: 500,
   MAX_OUTPUT_TOKENS: 512,
   TEMPERATURE: 0.3,
 } as const;
 
-// ── WhatsApp Message Templates ────────────────────────────────────────────────
-
 export const WHATSAPP = {
   FROM_NUMBER_PREFIX: "whatsapp:",
-  /** Twilio sandbox join keyword (used in sandbox mode only) */
   SANDBOX_KEYWORD: "join",
 } as const;
 
-// ── NACH Configuration ────────────────────────────────────────────────────────
-
 export const NACH = {
-  UMRN_PREFIX: "GRAB",
+  UMRN_PREFIX: "GRAB-NACH",
   MANDATE_VALIDITY_YEARS: 3,
 } as const;
 
-// ── HTTP Status Codes used in controllers ─────────────────────────────────────
+export const SUPPORT = {
+  EMAIL: "support@grabon.in",
+} as const;
 
 export const HTTP = {
   OK: 200,
