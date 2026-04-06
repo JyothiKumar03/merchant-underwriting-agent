@@ -9,9 +9,13 @@
    - [How the underwriting route works](#how-the-underwriting-route-works)
    - [How WhatsApp sending works](#how-whatsapp-sending-works)
    - [How the webhook works](#how-the-webhook-works)
-4. [Frontend](#frontend)
-5. [Approach](#approach)
-6. [Additional Features](#additional-features)
+4. [Setup](#setup)
+   - [Backend](#backend-1)
+   - [ngrok](#ngrok-required-for-whatsapp-webhook)
+   - [Frontend](#frontend-1)
+5. [Frontend](#frontend)
+6. [Approach](#approach)
+7. [Additional Features](#additional-features)
 
 ---
 
@@ -22,6 +26,8 @@ GrabOn runs a merchant rewards platform. The business problem is simple: which m
 ---
 
 ## Architecture
+
+![Alt Text](assets/architecture.jpeg)
 
 **1. Deterministic scoring, not vibes.** The underwriting engine runs five weighted sub-scores against the merchant's 12-month GMV history and platform behavior. AI agent never touches a number. It only writes the explanation after the decision is made.
 
@@ -110,9 +116,103 @@ The result is upserted into `underwriting_results`.
 
 The handler ignores everything except the words ACCEPT and REJECT (case insensitive). For anything else it returns 200 silently. For REJECT it replies with a TwiML message saying the offer has been declined. For ACCEPT it looks up the merchant tied to that number via `whatsapp_logs`, validates that their tier is not rejected and their status is appropriate, generates the UMRN, updates the DB, and replies with a TwiML confirmation that includes the UMRN, validity period, and support contact. All responses are inline XML, no extra API calls.
 
+![Alt Text](assets/whatsapp-offer.jpeg)
+![Alt Text](assets/NACH-confirm-whatsapp.jpeg)
+
+---
+
+## Setup
+
+### Prerequisites
+
+- Bun (backend runtime and package manager)
+- Node.js with npm or bun (frontend)
+- A Neon PostgreSQL database
+- Twilio account with a WhatsApp-enabled number
+- OpenAI API key (primary) and/or Anthropic API key (fallback)
+- ngrok (for local webhook testing)
+
+### Backend
+
+```bash
+cd backend
+cp .env.example .env
+```
+
+Fill in the `.env` file:
+
+```
+OPENAI_API_KEY=
+ANTHROPIC_API_KEY=
+DB_URL=
+PORT=8080
+ENVIRONMENT=development
+TWILIO_ACCOUNT_SID=
+TWILIO_AUTH_TOKEN=
+TWILIO_WHATSAPP_FROM=whatsapp:+14155238886
+```
+
+Then install and run:
+
+```bash
+bun install
+bun dev
+```
+
+The server starts on the port you set. On first boot it runs DB migrations automatically, so the tables are created if they do not exist yet.
+
+### ngrok (required for WhatsApp webhook)
+
+Twilio needs a public URL to forward inbound WhatsApp replies to. Run ngrok in a separate terminal:
+
+```bash
+ngrok http 8080
+```
+
+Copy the forwarding URL (e.g. `https://abc123.ngrok.io`) and set the webhook URL in your Twilio WhatsApp sandbox settings to:
+
+```
+https://abc123.ngrok.io/api/v1/underwrite/send-offer/webhook
+```
+
+This is the route that handles ACCEPT and REJECT replies from merchants.
+
+### Frontend
+
+```bash
+cd frontend
+cp .env.example .env
+```
+
+Fill in the `.env` file:
+
+```
+NEXT_PUBLIC_API_URL=http://localhost:8080
+```
+
+Then install and run:
+
+```bash
+bun install
+bun dev
+```
+
+Frontend runs on `http://localhost:3000` by default.
+
 ---
 
 ## Frontend
+
+### MERCHANTs DASHBOARD
+![Alt Text](assets/merchants-listing.png)
+![Alt Text](assets/merchant-id-dashboard-1.png)
+![Alt Text](assets/merchant-id-dashboard-2.png)
+
+### MERCHANT ADD
+![Alt Text](assets/merchants-listing.png)
+![Alt Text](assets/merchants-bulk-upload.png)
+
+
 
 **Dashboard** is the home page. It shows four summary numbers at the top: total merchants, how many have been underwritten, how many have an active mandate, and how many were rejected. Below that is a table of all merchants with their current status. Clicking a row goes to the detail page.
 
