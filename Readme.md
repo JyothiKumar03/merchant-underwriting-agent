@@ -136,6 +136,27 @@ The handler ignores everything except the words ACCEPT and REJECT (case insensit
 - OpenAI API key (primary) and/or Anthropic API key (fallback)
 - ngrok (for local webhook testing)
 
+#### Installing Bun
+
+If you do not have Bun installed:
+
+**macOS / Linux:**
+```bash
+curl -fsSL https://bun.sh/install | bash
+```
+
+**Windows (via PowerShell):**
+```powershell
+powershell -c "irm bun.sh/install.ps1 | iex"
+```
+
+**Via npm (cross-platform):**
+```bash
+npm install -g bun
+```
+
+After installation, restart your terminal and verify with `bun --version`.
+
 ### Backend
 
 ```bash
