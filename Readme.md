@@ -165,6 +165,16 @@ bun dev
 
 The server starts on the port you set. On first boot it runs DB migrations automatically, so the tables are created if they do not exist yet.
 
+The specific details of whatsapp, are shared via email, just paste them.
+
+For TO phone number, use your number...
+Do these exact steps:
+
+1. Dm to the `TWILIO_WHATSAPP_FROM` number shared via email in whatsapp.
+2. Paste this code : `join exist-dish`
+
+Now your whatsapp is ready to interact!
+
 ### ngrok (required for WhatsApp webhook)
 
 Twilio needs a public URL to forward inbound WhatsApp replies to. Run ngrok in a separate terminal:
@@ -174,6 +184,8 @@ ngrok http --domain=rubiginous-chillily-karter.ngrok-free.dev 8000
 ```
 
 This is for responding to the ACCEPT/REJECT message of client.
+
+** IF NGROK IS NOT INSTALLED THEN IGNORE, WE WONT GET NDAC via whatsapp **
 
 Copy the forwarding URL (e.g. `https://abc123.ngrok.io`) and set the webhook URL in your Twilio WhatsApp sandbox settings to:
 
