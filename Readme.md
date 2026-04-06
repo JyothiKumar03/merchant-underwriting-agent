@@ -29,6 +29,10 @@ GrabOn runs a merchant rewards platform. The business problem is simple: which m
 
 ![Alt Text](assets/architecture.jpeg)
 
+### VIDEO URL - 
+[LIVE DEMO](https://www.loom.com/share/78e2214170f34eb8ab0222f7d2f73d5b)
+
+
 **1. Deterministic scoring, not vibes.** The underwriting engine runs five weighted sub-scores against the merchant's 12-month GMV history and platform behavior. AI agent never touches a number. It only writes the explanation after the decision is made.
 
 **2. PostgreSQL holds everything.** One `merchants` table for raw profile data, one `underwriting_results` table that stores both the offer and the AI rationale as JSONB, and a `whatsapp_logs` table that is the audit trail for every message sent or failed.
