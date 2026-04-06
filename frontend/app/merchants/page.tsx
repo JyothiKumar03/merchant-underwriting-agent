@@ -107,7 +107,7 @@ export default function MerchantsPage() {
 
       {/* Bulk Upload Modal */}
       <Dialog open={bulk_open} onOpenChange={(open) => { if (!open) on_bulk_close(); else set_bulk_open(true); }}>
-        <DialogContent className="w-full max-w-md">
+        <DialogContent className="w-full max-w-none">
           <DialogHeader>
             <DialogTitle>Bulk Upload via CSV</DialogTitle>
             <DialogDescription>
@@ -124,7 +124,7 @@ export default function MerchantsPage() {
                   Download Template
                 </Button>
               </div>
-              <div className="grid grid-cols-2 gap-x-4 gap-y-0.5">
+              <div className="grid grid-cols-3 gap-x-2 gap-y-0.5">
                 {[
                   "name", "category", "contact_whatsapp",
                   "months_on_platform", "total_deals_listed",
@@ -134,7 +134,7 @@ export default function MerchantsPage() {
                   "seasonality_index", "deal_exclusivity_rate",
                   "return_and_refund_rate",
                 ].map((col) => (
-                  <p key={col} className="text-xs text-muted-foreground truncate">
+                  <p key={col} className="text-xs text-muted-foreground">
                     · {col}
                   </p>
                 ))}

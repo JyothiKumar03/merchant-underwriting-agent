@@ -79,8 +79,7 @@ export const MerchantDetailView = ({ merchant_id }: MerchantDetailViewProps) => 
   const is_sending = send_offer_mut.isPending;
   const is_accepting = accept_offer_mut.isPending;
 
-  const can_underwrite =
-    !is_underwriting && (!has_rationale(result, mode) || !result);
+  const can_underwrite = !is_underwriting;
 
   const offer_status = result?.offer_status ?? "not_underwritten";
   const can_send = result && offer_status === "underwritten";
@@ -218,7 +217,7 @@ export const MerchantDetailView = ({ merchant_id }: MerchantDetailViewProps) => 
               </p>
               <p className="text-xs text-muted-foreground">
                 {has_rationale(result, mode)
-                  ? "Rationale already generated — showing cached result"
+                  ? `${mode === "credit" ? "Credit" : "Insurance"} rationale generated — click Re-underwrite to reprocess`
                   : result
                   ? `Rationale missing for ${mode} mode — click to generate`
                   : "Not yet underwritten — click to run the full pipeline"}
@@ -426,15 +425,12 @@ export const MerchantDetailView = ({ merchant_id }: MerchantDetailViewProps) => 
 
         {/* Empty state */}
         {!result && !is_underwriting && (
-          <div className="rounded-2xl border border-dashed border-border bg-muted/20 py-16 text-center">
-            <p className="text-4xl mb-4">🤖</p>
+          <div className="rounded-2xl border border-dashed border-border bg-muted/20 py-16 flex flex-col items-center text-center gap-3">
+            <p className="text-4xl">🤖</p>
             <p className="text-lg font-semibold text-foreground">
               Ready to underwrite
             </p>
-            <p className="text-sm text-muted-foreground mt-1.5 max-w-sm mx-auto">
-              Select a mode above and click <strong>Underwrite</strong> to run the full
-              AI scoring pipeline.
-            </p>
+          
           </div>
         )}
       </main>
