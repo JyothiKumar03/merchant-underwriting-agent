@@ -7,6 +7,7 @@ type TEnv = {
   TWILIO_ACCOUNT_SID: string;
   TWILIO_AUTH_TOKEN: string;
   TWILIO_WHATSAPP_FROM: string;
+  TWILIO_WHATSAPP_TO: string
 };
 
 export const ENV: TEnv = {
@@ -18,4 +19,5 @@ export const ENV: TEnv = {
   TWILIO_ACCOUNT_SID: process.env.TWILIO_ACCOUNT_SID ?? "not-set",
   TWILIO_AUTH_TOKEN: process.env.TWILIO_AUTH_TOKEN ?? "not-set",
   TWILIO_WHATSAPP_FROM: process.env.TWILIO_WHATSAPP_FROM ?? "not-set",
+  TWILIO_WHATSAPP_TO: process.env.TWILIO_WHATSAPP_TO ?? "not-set"
 } as const;

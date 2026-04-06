@@ -1,3 +1,4 @@
+import { ENV } from "../constants/env.js";
 import type { TMerchantProfile } from "../types/index.js";
 
 export const merchants: TMerchantProfile[] = [
@@ -7,7 +8,7 @@ export const merchants: TMerchantProfile[] = [
     merchant_id: "MER_001",
     name: "StyleKraft Fashion",
     category: "fashion_beauty",
-    contact_whatsapp: "+917995938970",
+    contact_whatsapp: ENV.TWILIO_WHATSAPP_TO,
     months_on_platform: 18,
     total_deals_listed: 142,
     monthly_gmv_12m: [
@@ -27,7 +28,7 @@ export const merchants: TMerchantProfile[] = [
     merchant_id: "MER_002",
     name: "WellnessFirst Pharmacy",
     category: "health_wellness",
-    contact_whatsapp: "+917995938970",
+    contact_whatsapp: ENV.TWILIO_WHATSAPP_TO,
     months_on_platform: 24,
     total_deals_listed: 198,
     monthly_gmv_12m: [
@@ -47,7 +48,7 @@ export const merchants: TMerchantProfile[] = [
     merchant_id: "MER_003",
     name: "Wanderlust Holidays",
     category: "travel",
-    contact_whatsapp: "+917995938970",
+    contact_whatsapp: ENV.TWILIO_WHATSAPP_TO,
     months_on_platform: 20,
     total_deals_listed: 165,
     monthly_gmv_12m: [
@@ -69,7 +70,7 @@ export const merchants: TMerchantProfile[] = [
     merchant_id: "MER_004",
     name: "TechNova Electronics",
     category: "electronics",
-    contact_whatsapp: "+917995938970",
+    contact_whatsapp: ENV.TWILIO_WHATSAPP_TO,
     months_on_platform: 14,
     total_deals_listed: 87,
     monthly_gmv_12m: [
@@ -89,7 +90,7 @@ export const merchants: TMerchantProfile[] = [
     merchant_id: "MER_005",
     name: "FreshBasket Groceries",
     category: "food_delivery",
-    contact_whatsapp: "+917995938970",
+    contact_whatsapp: ENV.TWILIO_WHATSAPP_TO,
     months_on_platform: 12,
     total_deals_listed: 95,
     monthly_gmv_12m: [
@@ -111,7 +112,7 @@ export const merchants: TMerchantProfile[] = [
     merchant_id: "MER_006",
     name: "QuickBite Delivery",
     category: "food_delivery",
-    contact_whatsapp: "+917995938970",
+    contact_whatsapp: ENV.TWILIO_WHATSAPP_TO,
     months_on_platform: 11,
     total_deals_listed: 54,
     monthly_gmv_12m: [
@@ -131,7 +132,7 @@ export const merchants: TMerchantProfile[] = [
     merchant_id: "MER_007",
     name: "UrbanEscape Tours",
     category: "travel",
-    contact_whatsapp: "+917995938970",
+    contact_whatsapp: ENV.TWILIO_WHATSAPP_TO,
     months_on_platform: 8,
     total_deals_listed: 32,
     monthly_gmv_12m: [
@@ -154,7 +155,7 @@ export const merchants: TMerchantProfile[] = [
     merchant_id: "MER_008",
     name: "NewTrend Accessories",
     category: "fashion_beauty",
-    contact_whatsapp: "+917995938970",
+    contact_whatsapp: ENV.TWILIO_WHATSAPP_TO,
     months_on_platform: 3,
     total_deals_listed: 12,
     monthly_gmv_12m: [
@@ -175,7 +176,7 @@ export const merchants: TMerchantProfile[] = [
     merchant_id: "MER_009",
     name: "GadgetZone Express",
     category: "electronics",
-    contact_whatsapp: "+917995938970",
+    contact_whatsapp: ENV.TWILIO_WHATSAPP_TO,
     months_on_platform: 9,
     total_deals_listed: 28,
     monthly_gmv_12m: [
@@ -196,7 +197,7 @@ export const merchants: TMerchantProfile[] = [
     merchant_id: "MER_010",
     name: "GlowUp Beauty",
     category: "fashion_beauty",
-    contact_whatsapp: "+917995938970",
+    contact_whatsapp: ENV.TWILIO_WHATSAPP_TO,
     months_on_platform: 7,
     total_deals_listed: 22,
     monthly_gmv_12m: [
