@@ -4,6 +4,7 @@ import { createAnthropic } from "@ai-sdk/anthropic";
 import type { TAiProvider, TAiGenerateObjectParams } from "../types/index.js";
 import { AI_SERVICE } from "../constants/index.js";
 import { ENV } from "../constants/env.js";
+import { write_llm_log } from "../utils/llm-logger.js";
 
 // Returns the correct Vercel AI SDK model instance based on provider
 
@@ -52,7 +53,7 @@ export const generate_object = async <T>(params: TAiGenerateObjectParams<T>): Pr
 
   for (const { provider, model_id } of models) {
     try {
-      const { output } = await with_retry(
+      const { output, usage } = await with_retry(
         () =>
           generateText({
             model: get_model(provider, model_id),
@@ -67,6 +68,17 @@ export const generate_object = async <T>(params: TAiGenerateObjectParams<T>): Pr
         AI_SERVICE.MAX_RETRIES,
         AI_SERVICE.RETRY_BASE_DELAY_MS
       );
+      write_llm_log({
+        provider,
+        model_id,
+        usage: {
+          input_tokens: usage.inputTokens,
+          output_tokens: usage.outputTokens,
+          total_tokens: usage.totalTokens,
+        },
+        output,
+        timestamp: new Date().toISOString(),
+      });
       return output;
     } catch (err) {
       console.error(`[ai-service] ${provider}/${model_id} failed:`, err);

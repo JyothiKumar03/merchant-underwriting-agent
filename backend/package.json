@@ -24,6 +24,7 @@
   "dependencies": {
     "@ai-sdk/anthropic": "^3.0.66",
     "@ai-sdk/openai": "^3.0.50",
+    "@modelcontextprotocol/sdk": "^1.29.0",
     "@neondatabase/serverless": "^1.0.2",
     "@types/cors": "^2.8.19",
     "cors": "^2.8.6",
