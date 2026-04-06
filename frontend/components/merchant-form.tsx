@@ -1,6 +1,6 @@
 "use client";
 
-import { useForm } from "react-hook-form";
+import { useForm, type Resolver } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { Button } from "@/components/ui/button";
@@ -64,7 +64,7 @@ export const MerchantForm = ({ onSubmit, onCancel, isSubmitting, successMessage 
     handleSubmit,
     formState: { errors },
   } = useForm<FormValues>({
-    resolver: zodResolver(schema),
+    resolver: zodResolver(schema) as Resolver<FormValues>,
     defaultValues: {
       monthly_gmv_12m: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
       months_on_platform: 0,
@@ -116,7 +116,7 @@ export const MerchantForm = ({ onSubmit, onCancel, isSubmitting, successMessage 
 
       <FieldLabel error={errors.contact_whatsapp?.message}>
         <label className="text-sm font-medium">WhatsApp Number</label>
-        <Input {...register("contact_whatsapp")} placeholder="+917995938970" />
+        <Input {...register("contact_whatsapp")} placeholder="+918880300300" />
       </FieldLabel>
 
       {/* Platform */}
