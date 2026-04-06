@@ -1,386 +1,216 @@
-**GrabOn Project 06 – FINALIZED ARCHITECTURE BLUEPRINT**  
-**Multi-Channel Deal Distribution MCP Server**  
-**One-to-Many Merchant Rail**  
+# Deal Distribution MCP — Architecture
+
+## Table of Contents
+
+1. [What This Is](#what-this-is)
+2. [Architecture](#architecture)
+3. [How It Works](#how-it-works)
+   - [The only tool: distribute_deal](#the-only-tool-distribute_deal)
+   - [How copy generation works](#how-copy-generation-works)
+   - [How webhook simulation works](#how-webhook-simulation-works)
+4. [Folder Structure](#folder-structure)
+5. [Setup](#setup)
+   - [Connect to Claude Desktop](#connect-to-claude-desktop)
+6. [Demo Script](#demo-script)
 
 ---
 
-### 1. Project Goal (One-Sentence)
-Build a **single Express + MCP server** that exposes **one tool** (`distribute_deal`). When Claude Desktop calls it via natural language, the server generates **54 localized strings** (18 variants × 3 languages) + runs **mock webhook simulation** with retry logic, then returns everything in one clean JSON response.
+## What This Is
+
+GrabOn needs to push a merchant deal across 6 different channels — email, WhatsApp, push, Glance, PayU, Instagram — in 3 languages — English, Hindi, Telugu — with 3 copy styles per channel. That's 54 strings per deal. Writing them manually is a non-starter. This system exposes a single MCP tool (`distribute_deal`) that Claude Desktop calls. One tool call → one LLM prompt → 54 localized, channel-optimized strings + a full webhook delivery simulation with retry logic. Claude returns everything in one clean JSON.
 
 ---
 
-### 2. High-Level Architecture (Text Diagram)
+## Architecture
 
 ```
-Claude Desktop (Client)
-     ↓ Natural language prompt
-     ↓ JSON-RPC over HTTP
-Your Single Express Server (localhost:8000)   ←←← EVERYTHING RUNS HERE
-     ├── /mcp endpoint (MCP Layer – official SDK)
-     │    └── Tool: distribute_deal(params)
-     │           ├── 1× Claude API call (master prompt) → 54 strings
-     │           └── simulateWebhooks() [6 mock channels + retry]
-     ├── Optional CRUD routes (/api/deals, /health, etc.)
-     └── Returns JSON { variants, localized, deliveryLogs, successRate }
+Claude Desktop (you, typing in natural language)
+        |
+        |  "Distribute the Zomato 40% off deal"
+        |
+        ▼
+  JSON-RPC POST → http://localhost:8000/mcp
+        |
+        ▼
+  Express + MCP Server (localhost:8000)
+        |
+        ├──  /mcp  →  McpServer (official SDK)
+        │         └── Tool: distribute_deal(params)
+        │                  |
+        │                  ├── 1. Enrich with merchant metadata (DEAL_MERCHANTS lookup)
+        │                  ├── 2. build_master_prompt() → one big prompt
+        │                  ├── 3. ONE LLM call → 54 strings (3 langs × 3 styles × 6 channels)
+        │                  └── 4. simulate_webhooks() → 6 channels concurrently + retry
+        │
+        ├──  /health  →  { status: "ok" }
+        └──  /api/*   →  existing underwriting routes (untouched)
 ```
 
-**Visual Flow (exactly what happens at runtime)**
-
-```
-[User in Claude Desktop]
-          ↓ types “Distribute Zomato 30% off deal”
-Claude Desktop → calls distribute_deal(merchant_id, category, ...)
-          ↓ JSON-RPC POST to http://localhost:8000/mcp
-YOUR EXPRESS SERVER
-   ├── MCP Server (official TS SDK)
-   ├── Tool Handler:
-   │    1. Build masterPrompt (3 styles × 6 channels × 3 langs)
-   │    2. anthropic.messages.create() → ONE LLM CALL
-   │    3. Parse JSON → 54 strings
-   │    4. simulateWebhooks() → 6 mock functions + retry logic
-   │    5. Calculate success rate
-   └── Return full JSON to Claude Desktop
-Claude Desktop → displays all 54 strings + delivery logs beautifully
-```
-
-**No external platforms are ever called.**  
-**No real webhooks.**  
-**Everything stays in your laptop except 1 LLM call.**
+**Nothing external is called except one LLM API hit.** No real webhooks. No third-party channel APIs. Everything runs on your laptop.
 
 ---
 
-### 3. Tech Stack (Copy-Paste Ready)
+## How It Works
+
+### The only tool: distribute_deal
+
+`distribute_deal` is registered on the MCP server via `server.tool()`. Claude Desktop discovers it automatically once the server is running. When Claude calls it, the handler does four things in order, always.
+
+**Input the tool accepts:**
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `merchant_id` | string | yes | e.g. `"zomato-001"` — looked up in `DEAL_MERCHANTS` |
+| `category` | string | yes | e.g. `"Food & Dining"` |
+| `discount_value` | number | yes | numeric — `40` for 40% or ₹40 |
+| `discount_type` | `"percentage"` \| `"fixed"` | yes | determines how the label is formatted |
+| `expiry_timestamp` | string | yes | ISO 8601, e.g. `"2026-04-15T23:59:59Z"` |
+| `min_order_value` | number | no | minimum cart value in ₹ |
+| `max_redemptions` | number | no | redemption cap |
+| `exclusive_flag` | boolean | no | `true` if GrabOn-exclusive |
+
+**Step 1 — Merchant enrichment.** `get_deal_merchant(merchant_id)` pulls the name, category, and logo from the in-memory `DEAL_MERCHANTS` map. If the ID isn't found, it falls back to the raw params. No DB call, no network.
+
+**Step 2 — Prompt construction.** `build_master_prompt()` takes the enriched params and builds a single structured prompt. It handles formatting — `40% OFF` vs `₹40 OFF`, Indian date format for expiry, optional clauses for min order / redemption cap / exclusive flag — and then lays out the full 54-string task with per-channel character limits, style definitions, and language rules.
+
+**Step 3 — One LLM call.** `generate_object()` from `ai-service` fires the prompt against the model with `ZDealCopyOutput` as the output schema. Zod validates the response. The schema enforces `english | hindi | telugu` → `urgency_driven | value_driven | social_proof_driven` → `email | whatsapp | push | glance | payu | instagram`. If the LLM returns something malformed, Zod throws and the tool surfaces the error cleanly.
+
+**Step 4 — Webhook simulation.** `simulate_webhooks()` runs all 6 channel simulations concurrently via `Promise.all`. Each channel has a realistic success probability and base latency. Failed channels retry up to 3 times with exponential backoff (300ms, 600ms). The result is a `TWebhookLog[]` with `channel`, `status`, `retries`, and `latency_ms` per entry.
+
+The final return is a single JSON blob: merchant name, deal summary, all 54 variants, delivery logs, success rate, and a timestamp.
+
+---
+
+### How copy generation works
+
+The master prompt instructs the LLM to write for **psychological mechanism**, not just tone.
+
+- **urgency_driven** — loss aversion, scarcity signals, expiry pressure. Makes the user feel they'll regret not acting now.
+- **value_driven** — rational framing, savings math, "you're getting X for less". Speaks to the user who compares options.
+- **social_proof_driven** — crowd as persuader. "Thousands grabbed this", "most popular deal today". Implies smart people are already on it.
+
+Each style is applied across 6 channels, and each channel has a distinct context and hard character limit:
+
+| Channel | Limit | Context |
+|---|---|---|
+| email | 60 chars | Inbox subject line competing with dozens of others |
+| whatsapp | 120 chars | Personal message — warm, like a tip from a friend |
+| push | 50 chars | Interruption — one punchy line to earn a tap |
+| glance | 40 chars | Lock screen widget, zero context, must be instantly readable |
+| payu | 55 chars | User is on the payment page, card in hand — reinforce the deal |
+| instagram | 150 chars | Caption paired with a visual, 2–4 hashtags, soft CTA |
+
+Languages: English (Indian — ₹, natural contractions), Hindi (pure Devanagari, no Roman transliteration), Telugu (pure Telugu script, urban Andhra/Telangana register).
+
+All 54 strings must be unique. Every string must mention the merchant name and discount value. Character limits are hard limits.
+
+---
+
+### How webhook simulation works
+
+`simulate_webhooks()` runs all 6 channels in parallel. Each channel gets its own success probability and base latency (with ±80ms jitter). A failed attempt retries twice more with exponential backoff before giving up.
+
+| Channel | Success rate | Base latency |
+|---|---|---|
+| whatsapp | 98% | 110ms |
+| email | 95% | 220ms |
+| payu | 92% | 95ms |
+| instagram | 88% | 200ms |
+| push | 85% | 180ms |
+| glance | 80% | 150ms |
+
+No real network calls happen. It's all `setTimeout` + `Math.random`. The point is to get realistic-looking delivery logs with retry counts and latencies in the response.
+
+---
+
+## Folder Structure
+
+This lives inside the existing `backend/src` — no new top-level folder needed.
+
+```
+backend/src/
+├── index.ts                         ← starts the Express server + DB migrations
+├── app.ts                           ← Express app setup
+├── mcp/
+│   ├── server.ts                    ← McpServer setup, tool registration
+│   └── tools/
+│       └── distribute-deal.ts       ← the only MCP tool
+├── services/
+│   ├── ai-service.ts                ← generic LLM call wrapper (existing)
+│   ├── twilio-service.ts            ← WhatsApp sending (existing, untouched)
+│   └── webhook-simulator.ts         ← 6 mock channels + retry logic
+├── data/
+│   ├── deal-merchants.ts            ← DEAL_MERCHANTS map + get_deal_merchant()
+│   ├── category-benchmarks.ts       ← (existing underwriting data)
+│   └── merchants.ts                 ← (existing underwriting data)
+├── utils/
+│   ├── master-prompt.ts             ← build_master_prompt() — the 54-string prompt
+│   ├── ai-prompts.ts                ← (existing underwriting prompts)
+│   ├── scoring-engine.ts            ← (existing)
+│   ├── offer-calculator.ts          ← (existing)
+│   └── llm-logger.ts                ← (existing)
+├── types/
+│   ├── deal-types.ts                ← TDealParams, TDealCopyOutput, TWebhookLog, etc.
+│   └── index.ts                     ← (existing underwriting types)
+├── constants/
+│   ├── env.ts
+│   └── index.ts
+├── controllers/                     ← (existing underwriting controllers, untouched)
+├── models/                          ← DB schema + migrations (existing, untouched)
+└── routes/                          ← (existing underwriting routes, untouched)
+```
+
+The MCP server is mounted on top of the existing Express app. The underwriting routes are untouched.
+
+---
+
+## Setup
+
+The deal distributor runs on the same backend server — no separate process.
 
 ```bash
-Node.js 20+ / TypeScript
-Express
-@modelcontextprotocol/typescript-sdk          ← official MCP SDK
-@anthropic-ai/sdk                            ← for copy generation
-zod                                          ← for input/output schemas (optional but recommended)
-dotenv                                       ← for ANTHROPIC_API_KEY
+cd backend
+cp .env.example .env
 ```
 
----
-
-### 4. Folder Structure
+The `.env` needs at minimum:
 
 ```
-grabon-mcp-deal-distributor/
-├── src/
-│   ├── index.ts                 ← main Express + MCP server
-│   ├── mcp/
-│   │   ├── server.ts            ← MCP server setup
-│   │   ├── tools/
-│   │   │   └── distributeDeal.ts ← THE ONLY TOOL
-│   │   └── transport.ts         ← Streamable HTTP transport
-│   ├── core/
-│   │   ├── masterPrompt.ts      ← the big prompt template
-│   │   ├── webhookSimulator.ts  ← 6 mock endpoints + retry
-│   │   └── types.ts             ← DealParams, Output schemas
-│   └── utils/
-│       └── parseLLMResponse.ts
-├── .env
-├── tsconfig.json
-├── package.json
-└── README.md                    ← demo instructions
+OPENAI_API_KEY=        ← used for the 54-string generation call
+ANTHROPIC_API_KEY=     ← fallback / underwriting rationale
+DB_URL=
+PORT=8000
 ```
 
----
+Install and start:
 
-### 5. MCP Basics (Since You’ve Never Used It)
-
-**Official Resources (bookmark these now):**
-- Main site: https://modelcontextprotocol.io
-- Quickstart: https://modelcontextprotocol.io/quickstart
-- Specification (2025-11-25): https://modelcontextprotocol.io/specification/2025-11-25
-- TypeScript SDK GitHub: https://github.com/modelcontextprotocol/typescript-sdk
-- Server Guide: https://github.com/modelcontextprotocol/typescript-sdk/blob/main/docs/server.md
-
-**Key Concepts You Need (30-second version):**
-- MCP = JSON-RPC 2.0 over HTTP (or stdio).
-- You build a **Server** that registers **Tools**.
-- Claude Desktop connects to your `/mcp` endpoint → discovers your tool automatically.
-- Claude calls your tool → your code runs → you return result → Claude shows it.
-- We use **StreamableHTTPServerTransport** → works perfectly with Express.
-
----
-
-### 6. Detailed Implementation Steps (Do in This Order)
-
-**Day 1 – Setup + MCP Skeleton**
-1. `npx create-express-typescript-app` or your usual boilerplate.
-2. Install deps:
-   ```bash
-   npm install express @modelcontextprotocol/typescript-sdk @anthropic-ai/sdk zod dotenv
-   npm install -D typescript tsx @types/express
-   ```
-3. Create the files exactly as in the folder structure above.
-4. Get your Anthropic API key and put in `.env`.
-
-**Day 2 – Core Logic**
-- Implement `masterPrompt.ts` (one big prompt)
-- Implement `distributeDeal.ts` (tool handler)
-- Implement `webhookSimulator.ts`
-
-**Day 3 – Polish + Demo**
-- Connect to Claude Desktop
-- Test 3 merchant deals
-- Record demo
-
----
-
-### 7. Exact Code Skeletons (Copy-Paste Ready)
-
-#### 7.1 src/index.ts (Main Server)
-
-```ts
-import express from 'express';
-import dotenv from 'dotenv';
-import { MCP } from '@modelcontextprotocol/typescript-sdk';
-import { StreamableHTTPServerTransport } from '@modelcontextprotocol/typescript-sdk/transport';
-import { distributeDealTool } from './mcp/tools/distributeDeal';
-
-dotenv.config();
-
-const app = express();
-app.use(express.json());
-
-const PORT = process.env.PORT || 8000;
-
-// ──────────────────────────────
-// 1. NORMAL CRUD (optional but nice)
-app.get('/health', (req, res) => res.json({ status: 'ok', mcp: 'ready' }));
-
-// ──────────────────────────────
-// 2. MCP SERVER
-const mcpServer = new MCP({
-  name: "grabon-deal-distributor",
-  version: "1.0.0",
-  tools: [distributeDealTool],
-});
-
-const transport = new StreamableHTTPServerTransport();
-
-mcpServer.connect(transport);
-
-app.post('/mcp', async (req, res) => {
-  await transport.handleRequest(req, res);
-});
-
-app.listen(PORT, () => {
-  console.log(`🚀 GrabOn MCP Server running on http://localhost:${PORT}`);
-  console.log(`   MCP endpoint → http://localhost:${PORT}/mcp`);
-});
+```bash
+bun install
+bun dev
 ```
 
-#### 7.2 src/mcp/tools/distributeDeal.ts (THE ONLY TOOL)
+Server starts on port 8000. MCP endpoint is at `http://localhost:8000/mcp`. The `/health` route returns `{ status: "ok" }` if everything is up.
 
-```ts
-import { Tool } from '@modelcontextprotocol/typescript-sdk';
-import { z } from 'zod';
-import { anthropic } from '../..'; // your anthropic client
-import { buildMasterPrompt } from '../../core/masterPrompt';
-import { simulateWebhooks } from '../../core/webhookSimulator';
-import { parseLLMResponse } from '../../utils/parseLLMResponse';
-
-const DealParamsSchema = z.object({
-  merchant_id: z.string(),
-  category: z.string(),
-  discount_value: z.number(),
-  discount_type: z.enum(['percentage', 'fixed']),
-  expiry_timestamp: z.string(),
-  min_order_value: z.number().optional(),
-  max_redemptions: z.number().optional(),
-  exclusive_flag: z.boolean().optional(),
-});
-
-export const distributeDealTool: Tool = {
-  name: "distribute_deal",
-  description: "Distribute one merchant deal across 6 channels in 3 languages with A/B variants and webhook simulation",
-  inputSchema: DealParamsSchema,
-  handler: async (params) => {
-    const validated = DealParamsSchema.parse(params);
-
-    // 1. ONE LLM CALL
-    const prompt = buildMasterPrompt(validated);
-    const llmResponse = await anthropic.messages.create({
-      model: "claude-3-5-sonnet-20241022",
-      max_tokens: 8000,
-      temperature: 0.75,
-      system: "You are GrabOn's senior Indian-market copywriter...",
-      messages: [{ role: "user", content: prompt }],
-    });
-
-    const generated = parseLLMResponse(llmResponse);
-
-    // 2. WEBHOOK SIMULATION
-    const deliveryLogs = await simulateWebhooks(generated);
-
-    return {
-      variants: generated.variants,
-      localized: generated.localized,
-      delivery_logs: deliveryLogs,
-      success_rate: `${Math.round((deliveryLogs.filter(l => l.status === 'delivered').length / deliveryLogs.length) * 100)}%`,
-      total_strings: 54,
-    };
-  },
-};
-```
-
-#### 7.3 src/core/masterPrompt.ts (Critical – copy this exactly)
-
-(Full prompt template is ~150 lines – I can give it in the next message if you say “give me the full master prompt”. It forces 3 distinct styles + culturally accurate Hindi/Telugu.)
-
-#### 7.4 src/core/webhookSimulator.ts (6 mock channels + retry)
-
-```ts
-type Channel = 'email' | 'whatsapp' | 'push' | 'glance' | 'payu' | 'instagram';
-
-const mockEndpoints: Record<Channel, (payload: any) => Promise<{status: 'delivered'|'failed'|'pending' }>> = {
-  email: async () => ({ status: Math.random() > 0.1 ? 'delivered' : 'failed' }),
-  whatsapp: async () => ({ status: 'delivered' }),
-  // ... implement all 6
-};
-
-export async function simulateWebhooks(generated: any) {
-  const logs = [];
-  for (const channel of ['email','whatsapp','push','glance','payu','instagram'] as Channel[]) {
-    let status = 'pending';
-    let retries = 0;
-    for (let attempt = 0; attempt < 3; attempt++) {
-      const result = await mockEndpoints[channel](generated);
-      status = result.status;
-      if (status === 'delivered') break;
-      retries++;
-      await new Promise(r => setTimeout(r, 300 * (attempt + 1))); // exponential backoff
-    }
-    logs.push({ channel, status, retries });
-  }
-  return logs;
-}
-```
-
----
-
-### 8. How to Connect to Claude Desktop
+### Connect to Claude Desktop
 
 1. Open Claude Desktop.
-2. Go to Settings → MCP Servers → Add local server.
-3. Choose **URL transport**.
+2. Go to **Settings → MCP Servers → Add local server**.
+3. Select **URL transport**.
 4. Paste: `http://localhost:8000/mcp`
-5. Start your server → tool appears automatically.
+5. Start the backend — `distribute_deal` appears automatically in Claude's tool list.
 
 ---
 
-### 9. Demo Script (What Evaluators Will Test)
+## Demo Script
 
-Run server → open Claude Desktop → type:
-- “Distribute the new Zomato 30% off deal for food category”
-- “Distribute Swiggy 40% off grocery deal”
-- “Distribute Myntra 50% off fashion deal”
-
-Claude must return **all 54 strings + delivery logs + success rate**.
-
----
-
-
-What we have - 
-backend/src
-
-1. ai-service which has the generic AI calling code, we just have to invoke it.
-2. we have dedicated /tpyes (having all types), /data - having all static data
-3. I'm pasting the static data with types, u properly organize them in the code!
+Start the server, open Claude Desktop, then type any of these:
 
 ```
-// src/core/staticData.ts
-export interface Merchant {
-  merchant_id: string;
-  name: string;
-  logo_url: string;           // fake URL for demo
-  primary_category: string;
-  base_url: string;
-}
+Distribute the Zomato 40% off deal for food category, min order ₹349, expires April 15
+Distribute Swiggy 50% off grocery deal, 10000 max redemptions
+Distribute Myntra 60% off fashion deal, exclusive GrabOn offer
+```
 
-export const MERCHANTS: Record<string, Merchant> = {
-  "zomato-001": {
-    merchant_id: "zomato-001",
-    name: "Zomato",
-    logo_url: "https://logo.clearbit.com/zomato.com",
-    primary_category: "Food & Dining",
-    base_url: "https://www.zomato.com",
-  },
-  "swiggy-001": {
-    merchant_id: "swiggy-001",
-    name: "Swiggy",
-    logo_url: "https://logo.clearbit.com/swiggy.com",
-    primary_category: "Food & Dining",
-    base_url: "https://www.swiggy.com",
-  },
-  "myntra-001": {
-    merchant_id: "myntra-001",
-    name: "Myntra",
-    logo_url: "https://logo.clearbit.com/myntra.com",
-    primary_category: "Fashion & Lifestyle",
-    base_url: "https://www.myntra.com",
-  },
-  "blinkit-001": {
-    merchant_id: "blinkit-001",
-    name: "Blinkit",
-    logo_url: "https://logo.clearbit.com/blinkit.com",
-    primary_category: "Grocery & Instant Delivery",
-    base_url: "https://www.blinkit.com",
-  },
-};
+Claude calls `distribute_deal`, the handler runs, and you get back all 54 strings across 3 languages + delivery logs for all 6 channels with retry counts and latencies + a final success rate.
 
-// 3 FULL SAMPLE DEALS — ready to copy-paste into demo or test
-export const SAMPLE_DEALS = [
-  {
-    // Deal 1 — Zomato (realistic April 2026 offer)
-    merchant_id: "zomato-001",
-    category: "Food & Dining",
-    discount_value: 40,
-    discount_type: "percentage" as const,
-    expiry_timestamp: "2026-04-15T23:59:59Z",
-    min_order_value: 349,
-    max_redemptions: 5000,
-    exclusive_flag: true,
-  },
-  {
-    // Deal 2 — Swiggy
-    merchant_id: "swiggy-001",
-    category: "Food & Dining",
-    discount_value: 50,
-    discount_type: "percentage" as const,
-    expiry_timestamp: "2026-04-20T23:59:59Z",
-    min_order_value: 199,
-    max_redemptions: 10000,
-    exclusive_flag: false,
-  },
-  {
-    // Deal 3 — Myntra
-    merchant_id: "myntra-001",
-    category: "Fashion & Lifestyle",
-    discount_value: 60,
-    discount_type: "percentage" as const,
-    expiry_timestamp: "2026-04-12T23:59:59Z",
-    min_order_value: 999,
-    max_redemptions: 2500,
-    exclusive_flag: true,
-  },
-] as const;
-
-// Helper function — put this in the same file
-export function getMerchant(merchant_id: string): Merchant | null {
-  return MERCHANTS[merchant_id] || null;
-}
-
-// Inside handler: async (params) - Update distribute-deal.ts (add these 2 lines inside the handler)
-const validated = DealParamsSchema.parse(params);
-const merchant = getMerchant(validated.merchant_id);
-
-const enrichedParams = {
-  ...validated,
-  merchant_name: merchant?.name || "Merchant",
-  merchant_category: merchant?.primary_category || validated.category,
-  merchant_logo: merchant?.logo_url,
-};
+The 4 merchants wired up out of the box: `zomato-001`, `swiggy-001`, `myntra-001`, `blinkit-001`. Pass any other `merchant_id` and it falls back gracefully using the raw params.
