@@ -153,7 +153,7 @@ PORT=8080
 ENVIRONMENT=development
 TWILIO_ACCOUNT_SID=
 TWILIO_AUTH_TOKEN=
-TWILIO_WHATSAPP_FROM=whatsapp:+14155238886
+TWILIO_WHATSAPP_FROM=
 ```
 
 Then install and run:
@@ -170,8 +170,10 @@ The server starts on the port you set. On first boot it runs DB migrations autom
 Twilio needs a public URL to forward inbound WhatsApp replies to. Run ngrok in a separate terminal:
 
 ```bash
-ngrok http 8080
+ngrok http --domain=rubiginous-chillily-karter.ngrok-free.dev 8000
 ```
+
+This is for responding to the ACCEPT/REJECT message of client.
 
 Copy the forwarding URL (e.g. `https://abc123.ngrok.io`) and set the webhook URL in your Twilio WhatsApp sandbox settings to:
 
