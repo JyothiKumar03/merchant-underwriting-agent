@@ -1,12 +1,8 @@
 # Architecture — AI Merchant Underwriting Agent
 
-**GrabCredit × GrabInsurance | GrabOn Vibe Coder Challenge 2025**
-
----
-
 ## 1. What This Is
 
-Dashboard that scores 10 GrabOn merchants for credit risk, generates a working-capital loan offer (GrabCredit) OR a business-interruption insurance offer (GrabInsurance) based on a **mode toggle in the UI**, explains the decision via Claude, and delivers offers over WhatsApp.
+Dashboard that scores 10 merchants for credit risk, generates a working-capital loan offer (Credit) OR a business-interruption insurance offer (Insurance) based on a **mode toggle in the UI**, explains the decision via Claude, and delivers offers over WhatsApp.
 
 **Core principle:** *Code decides, Claude explains.* Scoring and offers are deterministic. Claude only writes the rationale.
 
@@ -28,7 +24,7 @@ Dashboard that scores 10 GrabOn merchants for credit risk, generates a working-c
 ## 3. System Flow
 
 ```
-UI: User selects mode [GrabCredit | GrabInsurance] via toggle
+UI: User selects mode [Credit | Insurance] via toggle
 UI: User clicks [Underwrite] on a merchant row
         │
         ▼
@@ -93,7 +89,7 @@ UI: User clicks [Underwrite] on a merchant row
 | `customer_return_rate`   | 0–1        | Repeat buyer fraction                                 |
 | `avg_order_value`        | number     | ₹                                                     |
 | `seasonality_index`      | number     | peak_gmv / trough_gmv. 1.0 = stable, 3.0+ = volatile |
-| `deal_exclusivity_rate`  | 0–1        | GrabOn-exclusive deals fraction                       |
+| `deal_exclusivity_rate`  | 0–1        | Platform-exclusive deals fraction                     |
 | `return_and_refund_rate` | 0–1        | Orders refunded fraction                              |
 
 ### Category Benchmarks (5 static rows)
@@ -166,7 +162,7 @@ GMV average = mean of **non-zero months only**.
 
 Always compute **both** (pure math, instant). Only rationale is mode-gated.
 
-### Credit (GrabCredit)
+### Credit
 
 `credit_limit = min(avg_monthly_gmv × multiplier, max_limit)`
 
@@ -176,7 +172,7 @@ Always compute **both** (pure math, instant). Only rationale is mode-gated.
 | Tier 2 | 4×         | 16.5% p.a. | 6 / 12 mo      | ₹20,00,000  |
 | Tier 3 | 2×         | 19.5% p.a. | 6 mo            | ₹5,00,000   |
 
-### Insurance (GrabInsurance)
+### Insurance
 
 `coverage = avg_monthly_gmv × 3`
 `annual_premium = coverage × risk_factor × tier_multiplier`
@@ -381,12 +377,12 @@ Mock NACH mandate.
 
 **Backend logic:**
 1. Look up result → 404 if missing, 400 if rejected
-2. Generate UMRN: `GRAB-NACH-{merchant_id}-{timestamp}`
+2. Generate UMRN: `NACH-{merchant_id}-{timestamp}`
 3. Update: `offer_status = 'mandate_active'`, store UMRN
 
 **Response:**
 ```json
-{ "offer_status": "mandate_active", "nach_umrn": "GRAB-NACH-MER_001-1712234567890" }
+{ "offer_status": "mandate_active", "nach_umrn": "NACH-MER_001-1712234567890" }
 ```
 
 ---
@@ -395,7 +391,7 @@ Mock NACH mandate.
 
 ### Mode Toggle
 
-Top of dashboard: `[GrabCredit]` / `[GrabInsurance]` tab switch. Controls:
+Top of dashboard: `[Credit]` / `[Insurance]` tab switch. Controls:
 - Which rationale is shown in detail panel
 - Which "Send via WhatsApp" fires
 - Which offer card is primary (both amounts always visible in table)
@@ -431,7 +427,7 @@ Pending ──[Underwrite]──▶ Underwritten ──[Send WhatsApp]──▶ 
 
 ```env
 ANTHROPIC_API_KEY=sk-ant-...
-DATABASE_URL=postgres://user:pass@host:5432/grabcredit
+DATABASE_URL=postgres://user:pass@host:5432/underwriting
 TWILIO_ACCOUNT_SID=AC...
 TWILIO_AUTH_TOKEN=...
 TWILIO_WHATSAPP_FROM=whatsapp:+14155238886

@@ -17,7 +17,7 @@
 
 ## What This Is
 
-GrabOn needs to push a merchant deal across 6 different channels — email, WhatsApp, push, Glance, PayU, Instagram — in 3 languages — English, Hindi, Telugu — with 3 copy styles per channel. That's 54 strings per deal. Writing them manually is a non-starter. This system exposes a single MCP tool (`distribute_deal`) that Claude Desktop calls. One tool call → one LLM prompt → 54 localized, channel-optimized strings + a full webhook delivery simulation with retry logic. Claude returns everything in one clean JSON.
+The platform needs to push a merchant deal across 6 different channels — email, WhatsApp, push, Glance, PayU, Instagram — in 3 languages — English, Hindi, Telugu — with 3 copy styles per channel. That's 54 strings per deal. Writing them manually is a non-starter. This system exposes a single MCP tool (`distribute_deal`) that Claude Desktop calls. One tool call → one LLM prompt → 54 localized, channel-optimized strings + a full webhook delivery simulation with retry logic. Claude returns everything in one clean JSON.
 
 ---
 
@@ -67,7 +67,7 @@ Claude Desktop (you, typing in natural language)
 | `expiry_timestamp` | string | yes | ISO 8601, e.g. `"2026-04-15T23:59:59Z"` |
 | `min_order_value` | number | no | minimum cart value in ₹ |
 | `max_redemptions` | number | no | redemption cap |
-| `exclusive_flag` | boolean | no | `true` if GrabOn-exclusive |
+| `exclusive_flag` | boolean | no | `true` if platform-exclusive |
 
 **Step 1 — Merchant enrichment.** `get_deal_merchant(merchant_id)` pulls the name, category, and logo from the in-memory `DEAL_MERCHANTS` map. If the ID isn't found, it falls back to the raw params. No DB call, no network.
 
@@ -208,7 +208,7 @@ Start the server, open Claude Desktop, then type any of these:
 ```
 Distribute the Zomato 40% off deal for food category, min order ₹349, expires April 15
 Distribute Swiggy 50% off grocery deal, 10000 max redemptions
-Distribute Myntra 60% off fashion deal, exclusive GrabOn offer
+Distribute Myntra 60% off fashion deal, exclusive platform offer
 ```
 
 Claude calls `distribute_deal`, the handler runs, and you get back all 54 strings across 3 languages + delivery logs for all 6 channels with retry counts and latencies + a final success rate.

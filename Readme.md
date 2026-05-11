@@ -21,7 +21,7 @@
 
 ## What This Is
 
-GrabOn runs a merchant rewards platform. The business problem is simple: which merchants deserve a credit line or an insurance product, and how do we communicate that decision to them without sounding like a bank rejection letter? This system scores merchants using their own platform data, calculates credit & insurance offers, and delivers them over WhatsApp/Dashboard with an explanation that actually makes sense to a merchant owner.
+This system scores merchants using their own platform data, calculates credit & insurance offers, and delivers them over WhatsApp/Dashboard with an explanation that actually makes sense to a merchant owner. The business problem is simple: which merchants deserve a credit line or an insurance product, and how do we communicate that decision without sounding like a bank rejection letter?
 
 ---
 
@@ -112,7 +112,7 @@ The result is upserted into `underwriting_results`.
 
 `POST /api/v1/send-offer` takes a merchant ID and a mode. It pulls the underwriting result, picks the right user message (the one Claude wrote for that mode), and fires it through Twilio's WhatsApp API. The message SID, number, and status are written to `whatsapp_logs`. The merchant's `offer_status` moves to offer sent.
 
-`POST /api/v1/accept-offer` is the manual acceptance path from the dashboard. It generates a NACH UMRN in the format `GRAB-NACH-{merchant_id}-{timestamp}`, stores it, and moves status to mandate active.
+`POST /api/v1/accept-offer` is the manual acceptance path from the dashboard. It generates a NACH UMRN in the format `NACH-{merchant_id}-{timestamp}`, stores it, and moves status to mandate active.
 
 ### How the webhook works
 
@@ -263,17 +263,7 @@ The actions section is conditional. If the merchant has not been underwritten ye
 
 The scoring breakdown shows five horizontal bars, one per sub-score, with the raw number on each. The tier badge is shown prominently. The rationale panel shows both the analyst explanation and the user message, with a note about which mode they belong to. If you switch modes and the other mode has not been run yet, it triggers a new underwriting call automatically.
 
-## Approach
-
-1. TBH, this financial terms are new to me, the domain knowledge... so I invested kinda 3 hrs in understanding the terminology and all to come up with some clarity.
-2. Then, wrote a plan, gave that to Claude Opus (Good cop role play) and then asked it to evaluate edge cases.
-3. Post that, gave this to the Grok 4.1 Model (bad cop role play), it will spot every edge case, penalize the claude's output, find diff cases.
-4. Then, I've wrote a detailed file, where I just maintain the core architecture and then used Claude code to code it off. 
-5. Backend - 3 iterations in total (initital setup, core logic building, then workaround features)
-6. Frontend - 4 iterations (all webpages were built in a single prompt, faced debugging sessions in fixing CSS issues :)
-
 ## Additional Features
-- WhatsApp webhook interaction : User's mobile will receive the number, apart from that, we can also receive user's response from whatsapp using webhook.
-- User addition feature : from the frontend only, we can add users data and play around with it.
 
-Nice problem statement, in terms of finance, learned a good concept!
+- WhatsApp webhook interaction: merchants receive the offer and can reply ACCEPT/REJECT directly from WhatsApp — the webhook handles it automatically.
+- Merchant addition: from the frontend, you can add merchant data manually or via CSV bulk upload.
