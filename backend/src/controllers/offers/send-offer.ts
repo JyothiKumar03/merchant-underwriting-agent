@@ -6,6 +6,7 @@ import {
   get_result_by_merchant,
   update_whatsapp_status,
   insert_whatsapp_log,
+  get_db_merchant_by_id,
 } from "../../models/schema.js";
 import { send_whatsapp_offer } from "../../services/twilio-service.js";
 import { HTTP } from "../../constants/index.js";
@@ -32,7 +33,7 @@ export const send_offer = async (req: Request, res: Response): Promise<void> => 
     return;
   }
 
-  const merchant = get_merchant_by_id(merchantId);
+  const merchant = get_merchant_by_id(merchantId) ?? await get_db_merchant_by_id(merchantId);
   if (!merchant) {
     res.status(HTTP.NOT_FOUND).json({ error: `Merchant ${merchantId} not found` });
     return;
